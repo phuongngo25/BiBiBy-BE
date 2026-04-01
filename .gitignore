@@ -117,4 +117,16 @@ lib/generated_plugin_registrant.dart
 .history
 .ionide
 
+### Executable ###
+*.app
+*.bat
+*.cgi
+*.com
+*.exe
+*.gadget
+*.jar
+*.pif
+*.vb
+*.wsf
+
 # End of https://www.toptal.com/developers/gitignore/api/flutter,visualstudiocode,dart
