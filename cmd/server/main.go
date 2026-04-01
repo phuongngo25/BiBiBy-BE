@@ -12,13 +12,21 @@ import (
 	"nutrix-backend/pkg/middleware"
 	"nutrix-backend/pkg/spoonacular"
 
+	"nutrix-backend/internal/domain"
+
 	nutritionDelivery "nutrix-backend/internal/nutrition/delivery"
 	nutritionRepo "nutrix-backend/internal/nutrition/repository"
+	nutritionSeeder "nutrix-backend/internal/nutrition/seeder"
 	nutritionUC "nutrix-backend/internal/nutrition/usecase"
 
 	userDelivery "nutrix-backend/internal/user/delivery"
 	userRepo "nutrix-backend/internal/user/repository"
 	userUC "nutrix-backend/internal/user/usecase"
+
+	workoutDelivery "nutrix-backend/internal/workout/delivery"
+	workoutRepo "nutrix-backend/internal/workout/repository"
+	workoutUC "nutrix-backend/internal/workout/usecase"
+	"nutrix-backend/pkg/rapidapi"
 )
 
 func main() {
@@ -40,8 +48,19 @@ func main() {
 		log.Fatalf("Could not run database migrations: %v", err)
 	}
 
-	// Run seeder to populate food data if DB is empty
-	pkgdb.SeedDummyFoods(db)
+	// -------------------------------------------------------------------------
+	// 2.5 DATABASE SEEDING — Stream JSON directly into DB
+	// -------------------------------------------------------------------------
+	var foodCount int64
+	db.Model(&domain.Food{}).Where("source IN ?", []string{"USDA", "VFA", "VFA_DISH"}).Count(&foodCount)
+	if foodCount < 10000 {
+		log.Println("Base truth data missing or incomplete, starting auto-seeder...")
+		if err := nutritionSeeder.SeedBaseTruthData(db); err != nil {
+			log.Printf("Seeder warnings/errors: %v", err)
+		}
+	} else {
+		log.Printf("Database already contains %d food records. Skipping auto-seeder.", foodCount)
+	}
 
 	// -------------------------------------------------------------------------
 	// 3. DEPENDENCY INJECTION — Nutrition Context
@@ -55,6 +74,13 @@ func main() {
 	// -------------------------------------------------------------------------
 	uRepo := userRepo.NewPostgresUserRepository(db)
 	uUC := userUC.NewUserUseCase(uRepo, cfg.JWTSecret, cfg.JWTExpirationHours)
+
+	// -------------------------------------------------------------------------
+	// 4.5 DEPENDENCY INJECTION — Workout Context
+	// -------------------------------------------------------------------------
+	exerciseClient := rapidapi.NewExerciseClient(cfg.RapidAPIKey)
+	workoutRepoInst := workoutRepo.NewPostgresWorkoutRepository(db)
+	workoutUCInst := workoutUC.NewWorkoutUseCase(workoutRepoInst, exerciseClient)
 
 	// -------------------------------------------------------------------------
 	// 5. HTTP ROUTER & SECURITY MIDDLEWARES
@@ -90,6 +116,7 @@ func main() {
 	{
 		nutritionDelivery.NewNutritionHandler(protected, nutritionUCInst)
 		userDelivery.RegisterProfileRoutes(protected, uUC)
+		workoutDelivery.NewWorkoutHandler(protected, workoutUCInst)
 	}
 	// -------------------------------------------------------------------------
 

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,10 +34,50 @@ func (r *postgresNutritionRepository) GetFoodByID(ctx context.Context, id uuid.U
 	return &food, nil
 }
 
-// SearchFoods handles fetching foods matching the given keyword (case-insensitive).
+// SearchFoods implements Fuzzy Logic + Relevance Ranking against the local DB.
+//
+// Matching rules (OR — any match qualifies):
+//   - name_en ILIKE '%query%'   (substring, case-insensitive)
+//   - name_vi ILIKE '%query%'
+//   - similarity(name_en, query) > 0.2   (pg_trgm fuzzy — catches typos)
+//
+// Relevance ordering (best match first):
+//  1. Exact match        → name_en ILIKE 'query'     (score 0)
+//  2. Prefix match       → name_en ILIKE 'query%'    (score 1)
+//  3. Fuzzy/substring    → ranked by similarity() DESC
+//  3b. Length tiebreaker → LENGTH(name_en) ASC
+//
+// Hard cap: 50 results.
 func (r *postgresNutritionRepository) SearchFoods(ctx context.Context, keyword string) ([]domain.Food, error) {
+	if len(strings.TrimSpace(keyword)) < 2 {
+		return []domain.Food{}, nil
+	}
+
+	const searchSQL = `
+		SELECT * FROM foods
+		WHERE
+			name_en ILIKE '%' || ? || '%'
+			OR name_vi ILIKE '%' || ? || '%'
+			OR similarity(name_en, ?) > 0.2
+		ORDER BY
+			(name_en ILIKE ?)                DESC,
+			(name_en ILIKE ? || '%')         DESC,
+			similarity(name_en, ?)           DESC,
+			LENGTH(name_en)                  ASC
+		LIMIT 50
+	`
+
 	var foods []domain.Food
-	err := r.db.WithContext(ctx).Where("name ILIKE ?", "%"+keyword+"%").Find(&foods).Error
+	err := r.db.WithContext(ctx).Raw(
+		searchSQL,
+		keyword, // ILIKE '%?%' name_en
+		keyword, // ILIKE '%?%' name_vi
+		keyword, // similarity(name_en, ?)
+		keyword, // exact: name_en ILIKE ?
+		keyword, // prefix: name_en ILIKE ?%
+		keyword, // similarity ORDER BY
+	).Scan(&foods).Error
+
 	if err != nil {
 		return nil, domain.ErrInternalServerError
 	}
