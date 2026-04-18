@@ -1,0 +1,332 @@
+[
+  {
+    "life_stage_group": "Infants",
+    "age_range": "0–6 mo",
+    "rda_ai": {
+      "elements": {
+        "calcium_mg": 200, "chromium_mcg": 0.2, "copper_mcg": 200, "fluoride_mg": 0.01,
+        "iodine_mcg": 110, "iron_mg": 0.27, "magnesium_mg": 30, "manganese_mg": 0.003,
+        "molybdenum_mcg": 2, "phosphorus_mg": 100, "selenium_mcg": 15, "zinc_mg": 2,
+        "potassium_mg": 400, "sodium_mg": 110, "chloride_g": 0.18
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 400, "vitamin_c_mg": 40, "vitamin_d_mcg": 10, "vitamin_e_mg": 4,
+        "vitamin_k_mcg": 2.0, "thiamin_mg": 0.2, "riboflavin_mg": 0.3, "niacin_mg": 2,
+        "vitamin_b6_mg": 0.1, "folate_mcg": 65, "vitamin_b12_mcg": 0.4, "pantothenic_acid_mg": 1.7,
+        "biotin_mcg": 5, "choline_mg": 125
+      },
+      "macronutrients": {
+        "total_water_l": 0.7, "carbohydrate_g": 60, "total_fiber_g": null, "fat_g": 31,
+        "linoleic_acid_g": 4.4, "alpha_linolenic_acid_g": 0.5, "protein_g": 9.1
+      }
+    },
+    "ear": {
+      "elements": {
+        "calcium_mg": null, "copper_mcg": null, "iodine_mcg": null, "iron_mg": null,
+        "magnesium_mg": null, "molybdenum_mcg": null, "phosphorus_mg": null, "selenium_mcg": null, "zinc_mg": null
+      },
+      "vitamins": {
+        "vitamin_a_mcg": null, "vitamin_c_mg": null, "vitamin_d_mcg": null, "vitamin_e_mg": null,
+        "thiamin_mg": null, "riboflavin_mg": null, "niacin_mg": null, "vitamin_b6_mg": null,
+        "folate_mcg": null, "vitamin_b12_mcg": null
+      },
+      "macronutrients": {
+        "carbohydrate_g": null, "protein_g_per_kg": null
+      }
+    },
+    "ul": {
+      "elements": {
+        "arsenic_mg": null, "boron_mg": null, "calcium_mg": 1000, "chromium_mcg": null,
+        "copper_mcg": null, "fluoride_mg": 0.7, "iodine_mcg": null, "iron_mg": 40,
+        "magnesium_mg": null, "manganese_mg": null, "molybdenum_mcg": null, "nickel_mg": null,
+        "phosphorus_g": null, "selenium_mcg": 45, "silicon": null, "sulfate": null,
+        "vanadium_mg": null, "zinc_mg": 4, "sodium_g": null, "chloride_g": null
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 600, "vitamin_c_mg": null, "vitamin_d_mcg": 25, "vitamin_e_mg": null,
+        "vitamin_k_mcg": null, "thiamin_mg": null, "riboflavin_mg": null, "niacin_mg": null,
+        "vitamin_b6_mg": null, "folate_mcg": null, "vitamin_b12_mcg": null, "pantothenic_acid_mg": null,
+        "biotin_mcg": null, "choline_g": null, "carotenoids": null
+      }
+    },
+    "amdr": {
+      "fat_percent": null, "n_6_percent": null, "n_3_percent": null,
+      "carbohydrate_percent": null, "protein_percent": null
+    }
+  },
+  {
+    "life_stage_group": "Children",
+    "age_range": "1–3 y",
+    "rda_ai": {
+      "elements": {
+        "calcium_mg": 700, "chromium_mcg": 11, "copper_mcg": 340, "fluoride_mg": 0.7,
+        "iodine_mcg": 90, "iron_mg": 7, "magnesium_mg": 80, "manganese_mg": 1.2,
+        "molybdenum_mcg": 17, "phosphorus_mg": 460, "selenium_mcg": 20, "zinc_mg": 3,
+        "potassium_mg": 2000, "sodium_mg": 800, "chloride_g": 1.5
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 300, "vitamin_c_mg": 15, "vitamin_d_mcg": 15, "vitamin_e_mg": 6,
+        "vitamin_k_mcg": 30, "thiamin_mg": 0.5, "riboflavin_mg": 0.5, "niacin_mg": 6,
+        "vitamin_b6_mg": 0.5, "folate_mcg": 150, "vitamin_b12_mcg": 0.9, "pantothenic_acid_mg": 2,
+        "biotin_mcg": 8, "choline_mg": 200
+      },
+      "macronutrients": {
+        "total_water_l": 1.3, "carbohydrate_g": 130, "total_fiber_g": 19, "fat_g": null,
+        "linoleic_acid_g": 7, "alpha_linolenic_acid_g": 0.7, "protein_g": 13
+      }
+    },
+    "ear": {
+      "elements": {
+        "calcium_mg": 500, "copper_mcg": 260, "iodine_mcg": 65, "iron_mg": 3.0,
+        "magnesium_mg": 65, "molybdenum_mcg": 13, "phosphorus_mg": 380, "selenium_mcg": 17, "zinc_mg": 2.5
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 210, "vitamin_c_mg": 13, "vitamin_d_mcg": 10, "vitamin_e_mg": 5,
+        "thiamin_mg": 0.4, "riboflavin_mg": 0.4, "niacin_mg": 5, "vitamin_b6_mg": 0.4,
+        "folate_mcg": 120, "vitamin_b12_mcg": 0.7
+      },
+      "macronutrients": {
+        "carbohydrate_g": 100, "protein_g_per_kg": 0.87
+      }
+    },
+    "ul": {
+      "elements": {
+        "arsenic_mg": null, "boron_mg": 3, "calcium_mg": 2500, "chromium_mcg": null,
+        "copper_mcg": 1000, "fluoride_mg": 1.3, "iodine_mcg": 200, "iron_mg": 40,
+        "magnesium_mg": 65, "manganese_mg": 2, "molybdenum_mcg": 300, "nickel_mg": 0.2,
+        "phosphorus_g": 3, "selenium_mcg": 90, "silicon": null, "sulfate": null,
+        "vanadium_mg": null, "zinc_mg": 7, "sodium_g": null, "chloride_g": 2.3
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 600, "vitamin_c_mg": 400, "vitamin_d_mcg": 63, "vitamin_e_mg": 200,
+        "vitamin_k_mcg": null, "thiamin_mg": null, "riboflavin_mg": null, "niacin_mg": 10,
+        "vitamin_b6_mg": 30, "folate_mcg": 300, "vitamin_b12_mcg": null, "pantothenic_acid_mg": null,
+        "biotin_mcg": null, "choline_g": 1.0, "carotenoids": null
+      }
+    },
+    "amdr": {
+      "fat_percent": "30-40", "n_6_percent": "5-10", "n_3_percent": "0.6-1.2",
+      "carbohydrate_percent": "45-65", "protein_percent": "5-20"
+    }
+  },
+  {
+    "life_stage_group": "Males",
+    "age_range": "19–30 y",
+    "rda_ai": {
+      "elements": {
+        "calcium_mg": 1000, "chromium_mcg": 35, "copper_mcg": 900, "fluoride_mg": 4,
+        "iodine_mcg": 150, "iron_mg": 8, "magnesium_mg": 400, "manganese_mg": 2.3,
+        "molybdenum_mcg": 45, "phosphorus_mg": 700, "selenium_mcg": 55, "zinc_mg": 11,
+        "potassium_mg": 3400, "sodium_mg": 1500, "chloride_g": 2.3
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 900, "vitamin_c_mg": 90, "vitamin_d_mcg": 15, "vitamin_e_mg": 15,
+        "vitamin_k_mcg": 120, "thiamin_mg": 1.2, "riboflavin_mg": 1.3, "niacin_mg": 16,
+        "vitamin_b6_mg": 1.3, "folate_mcg": 400, "vitamin_b12_mcg": 2.4, "pantothenic_acid_mg": 5,
+        "biotin_mcg": 30, "choline_mg": 550
+      },
+      "macronutrients": {
+        "total_water_l": 3.7, "carbohydrate_g": 130, "total_fiber_g": 38, "fat_g": null,
+        "linoleic_acid_g": 17, "alpha_linolenic_acid_g": 1.6, "protein_g": 56
+      }
+    },
+    "ear": {
+      "elements": {
+        "calcium_mg": 800, "copper_mcg": 700, "iodine_mcg": 95, "iron_mg": 6,
+        "magnesium_mg": 330, "molybdenum_mcg": 34, "phosphorus_mg": 580, "selenium_mcg": 45, "zinc_mg": 9.4
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 625, "vitamin_c_mg": 75, "vitamin_d_mcg": 10, "vitamin_e_mg": 12,
+        "thiamin_mg": 1.0, "riboflavin_mg": 1.1, "niacin_mg": 12, "vitamin_b6_mg": 1.1,
+        "folate_mcg": 320, "vitamin_b12_mcg": 2.0
+      },
+      "macronutrients": {
+        "carbohydrate_g": 100, "protein_g_per_kg": 0.66
+      }
+    },
+    "ul": {
+      "elements": {
+        "arsenic_mg": null, "boron_mg": 20, "calcium_mg": 2500, "chromium_mcg": null,
+        "copper_mcg": 10000, "fluoride_mg": 10, "iodine_mcg": 1100, "iron_mg": 45,
+        "magnesium_mg": 350, "manganese_mg": 11, "molybdenum_mcg": 2000, "nickel_mg": 1.0,
+        "phosphorus_g": 4, "selenium_mcg": 400, "silicon": null, "sulfate": null,
+        "vanadium_mg": 1.8, "zinc_mg": 40, "sodium_g": null, "chloride_g": 3.6
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 3000, "vitamin_c_mg": 2000, "vitamin_d_mcg": 100, "vitamin_e_mg": 1000,
+        "vitamin_k_mcg": null, "thiamin_mg": null, "riboflavin_mg": null, "niacin_mg": 35,
+        "vitamin_b6_mg": 100, "folate_mcg": 1000, "vitamin_b12_mcg": null, "pantothenic_acid_mg": null,
+        "biotin_mcg": null, "choline_g": 3.5, "carotenoids": null
+      }
+    },
+    "amdr": {
+      "fat_percent": "20-35", "n_6_percent": "5-10", "n_3_percent": "0.6-1.2",
+      "carbohydrate_percent": "45-65", "protein_percent": "10-35"
+    }
+  },
+  {
+    "life_stage_group": "Females",
+    "age_range": "19–30 y",
+    "rda_ai": {
+      "elements": {
+        "calcium_mg": 1000, "chromium_mcg": 25, "copper_mcg": 900, "fluoride_mg": 3,
+        "iodine_mcg": 150, "iron_mg": 18, "magnesium_mg": 310, "manganese_mg": 1.8,
+        "molybdenum_mcg": 45, "phosphorus_mg": 700, "selenium_mcg": 55, "zinc_mg": 8,
+        "potassium_mg": 2600, "sodium_mg": 1500, "chloride_g": 2.3
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 700, "vitamin_c_mg": 75, "vitamin_d_mcg": 15, "vitamin_e_mg": 15,
+        "vitamin_k_mcg": 90, "thiamin_mg": 1.1, "riboflavin_mg": 1.1, "niacin_mg": 14,
+        "vitamin_b6_mg": 1.3, "folate_mcg": 400, "vitamin_b12_mcg": 2.4, "pantothenic_acid_mg": 5,
+        "biotin_mcg": 30, "choline_mg": 425
+      },
+      "macronutrients": {
+        "total_water_l": 2.7, "carbohydrate_g": 130, "total_fiber_g": 25, "fat_g": null,
+        "linoleic_acid_g": 12, "alpha_linolenic_acid_g": 1.1, "protein_g": 46
+      }
+    },
+    "ear": {
+      "elements": {
+        "calcium_mg": 800, "copper_mcg": 700, "iodine_mcg": 95, "iron_mg": 8.1,
+        "magnesium_mg": 255, "molybdenum_mcg": 34, "phosphorus_mg": 580, "selenium_mcg": 45, "zinc_mg": 6.8
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 500, "vitamin_c_mg": 60, "vitamin_d_mcg": 10, "vitamin_e_mg": 12,
+        "thiamin_mg": 0.9, "riboflavin_mg": 0.9, "niacin_mg": 11, "vitamin_b6_mg": 1.1,
+        "folate_mcg": 320, "vitamin_b12_mcg": 2.0
+      },
+      "macronutrients": {
+        "carbohydrate_g": 100, "protein_g_per_kg": 0.66
+      }
+    },
+    "ul": {
+      "elements": {
+        "arsenic_mg": null, "boron_mg": 20, "calcium_mg": 2500, "chromium_mcg": null,
+        "copper_mcg": 10000, "fluoride_mg": 10, "iodine_mcg": 1100, "iron_mg": 45,
+        "magnesium_mg": 350, "manganese_mg": 11, "molybdenum_mcg": 2000, "nickel_mg": 1.0,
+        "phosphorus_g": 4, "selenium_mcg": 400, "silicon": null, "sulfate": null,
+        "vanadium_mg": 1.8, "zinc_mg": 40, "sodium_g": null, "chloride_g": 3.6
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 3000, "vitamin_c_mg": 2000, "vitamin_d_mcg": 100, "vitamin_e_mg": 1000,
+        "vitamin_k_mcg": null, "thiamin_mg": null, "riboflavin_mg": null, "niacin_mg": 35,
+        "vitamin_b6_mg": 100, "folate_mcg": 1000, "vitamin_b12_mcg": null, "pantothenic_acid_mg": null,
+        "biotin_mcg": null, "choline_g": 3.5, "carotenoids": null
+      }
+    },
+    "amdr": {
+      "fat_percent": "20-35", "n_6_percent": "5-10", "n_3_percent": "0.6-1.2",
+      "carbohydrate_percent": "45-65", "protein_percent": "10-35"
+    }
+  },
+  {
+    "life_stage_group": "Pregnancy",
+    "age_range": "19–30 y",
+    "rda_ai": {
+      "elements": {
+        "calcium_mg": 1000, "chromium_mcg": 30, "copper_mcg": 1000, "fluoride_mg": 3,
+        "iodine_mcg": 220, "iron_mg": 27, "magnesium_mg": 350, "manganese_mg": 2.0,
+        "molybdenum_mcg": 50, "phosphorus_mg": 700, "selenium_mcg": 60, "zinc_mg": 11,
+        "potassium_mg": 2900, "sodium_mg": 1500, "chloride_g": 2.3
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 770, "vitamin_c_mg": 85, "vitamin_d_mcg": 15, "vitamin_e_mg": 15,
+        "vitamin_k_mcg": 90, "thiamin_mg": 1.4, "riboflavin_mg": 1.4, "niacin_mg": 18,
+        "vitamin_b6_mg": 1.9, "folate_mcg": 600, "vitamin_b12_mcg": 2.6, "pantothenic_acid_mg": 6,
+        "biotin_mcg": 30, "choline_mg": 450
+      },
+      "macronutrients": {
+        "total_water_l": 3.0, "carbohydrate_g": 175, "total_fiber_g": 28, "fat_g": null,
+        "linoleic_acid_g": 13, "alpha_linolenic_acid_g": 1.4, "protein_g": 71
+      }
+    },
+    "ear": {
+      "elements": {
+        "calcium_mg": 800, "copper_mcg": 800, "iodine_mcg": 160, "iron_mg": 22,
+        "magnesium_mg": 290, "molybdenum_mcg": 40, "phosphorus_mg": 580, "selenium_mcg": 49, "zinc_mg": 9.5
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 550, "vitamin_c_mg": 70, "vitamin_d_mcg": 10, "vitamin_e_mg": 12,
+        "thiamin_mg": 1.2, "riboflavin_mg": 1.2, "niacin_mg": 14, "vitamin_b6_mg": 1.6,
+        "folate_mcg": 520, "vitamin_b12_mcg": 2.2
+      },
+      "macronutrients": {
+        "carbohydrate_g": 135, "protein_g_per_kg": 0.88
+      }
+    },
+    "ul": {
+      "elements": {
+        "arsenic_mg": null, "boron_mg": 20, "calcium_mg": 2500, "chromium_mcg": null,
+        "copper_mcg": 10000, "fluoride_mg": 10, "iodine_mcg": 1100, "iron_mg": 45,
+        "magnesium_mg": 350, "manganese_mg": 11, "molybdenum_mcg": 2000, "nickel_mg": 1.0,
+        "phosphorus_g": 3.5, "selenium_mcg": 400, "silicon": null, "sulfate": null,
+        "vanadium_mg": null, "zinc_mg": 40, "sodium_g": null, "chloride_g": 3.6
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 3000, "vitamin_c_mg": 2000, "vitamin_d_mcg": 100, "vitamin_e_mg": 1000,
+        "vitamin_k_mcg": null, "thiamin_mg": null, "riboflavin_mg": null, "niacin_mg": 35,
+        "vitamin_b6_mg": 100, "folate_mcg": 1000, "vitamin_b12_mcg": null, "pantothenic_acid_mg": null,
+        "biotin_mcg": null, "choline_g": 3.5, "carotenoids": null
+      }
+    },
+    "amdr": {
+      "fat_percent": "20-35", "n_6_percent": "5-10", "n_3_percent": "0.6-1.2",
+      "carbohydrate_percent": "45-65", "protein_percent": "10-35"
+    }
+  },
+  {
+    "life_stage_group": "Lactation",
+    "age_range": "19–30 y",
+    "rda_ai": {
+      "elements": {
+        "calcium_mg": 1000, "chromium_mcg": 45, "copper_mcg": 1300, "fluoride_mg": 3,
+        "iodine_mcg": 290, "iron_mg": 9, "magnesium_mg": 310, "manganese_mg": 2.6,
+        "molybdenum_mcg": 50, "phosphorus_mg": 700, "selenium_mcg": 70, "zinc_mg": 12,
+        "potassium_mg": 2800, "sodium_mg": 1500, "chloride_g": 2.3
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 1300, "vitamin_c_mg": 120, "vitamin_d_mcg": 15, "vitamin_e_mg": 19,
+        "vitamin_k_mcg": 90, "thiamin_mg": 1.4, "riboflavin_mg": 1.6, "niacin_mg": 17,
+        "vitamin_b6_mg": 2.0, "folate_mcg": 500, "vitamin_b12_mcg": 2.8, "pantothenic_acid_mg": 7,
+        "biotin_mcg": 35, "choline_mg": 550
+      },
+      "macronutrients": {
+        "total_water_l": 3.8, "carbohydrate_g": 210, "total_fiber_g": 29, "fat_g": null,
+        "linoleic_acid_g": 13, "alpha_linolenic_acid_g": 1.3, "protein_g": 71
+      }
+    },
+    "ear": {
+      "elements": {
+        "calcium_mg": 800, "copper_mcg": 1000, "iodine_mcg": 209, "iron_mg": 6.5,
+        "magnesium_mg": 255, "molybdenum_mcg": 36, "phosphorus_mg": 580, "selenium_mcg": 59, "zinc_mg": 10.4
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 900, "vitamin_c_mg": 100, "vitamin_d_mcg": 10, "vitamin_e_mg": 16,
+        "thiamin_mg": 1.2, "riboflavin_mg": 1.3, "niacin_mg": 13, "vitamin_b6_mg": 1.7,
+        "folate_mcg": 450, "vitamin_b12_mcg": 2.4
+      },
+      "macronutrients": {
+        "carbohydrate_g": 160, "protein_g_per_kg": 1.05
+      }
+    },
+    "ul": {
+      "elements": {
+        "arsenic_mg": null, "boron_mg": 20, "calcium_mg": 2500, "chromium_mcg": null,
+        "copper_mcg": 10000, "fluoride_mg": 10, "iodine_mcg": 1100, "iron_mg": 45,
+        "magnesium_mg": 350, "manganese_mg": 11, "molybdenum_mcg": 2000, "nickel_mg": 1.0,
+        "phosphorus_g": 4, "selenium_mcg": 400, "silicon": null, "sulfate": null,
+        "vanadium_mg": null, "zinc_mg": 40, "sodium_g": null, "chloride_g": 3.6
+      },
+      "vitamins": {
+        "vitamin_a_mcg": 3000, "vitamin_c_mg": 2000, "vitamin_d_mcg": 100, "vitamin_e_mg": 1000,
+        "vitamin_k_mcg": null, "thiamin_mg": null, "riboflavin_mg": null, "niacin_mg": 35,
+        "vitamin_b6_mg": 100, "folate_mcg": 1000, "vitamin_b12_mcg": null, "pantothenic_acid_mg": null,
+        "biotin_mcg": null, "choline_g": 3.5, "carotenoids": null
+      }
+    },
+    "amdr": {
+      "fat_percent": "20-35", "n_6_percent": "5-10", "n_3_percent": "0.6-1.2",
+      "carbohydrate_percent": "45-65", "protein_percent": "10-35"
+    }
+  }
+]
