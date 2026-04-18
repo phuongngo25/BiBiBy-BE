@@ -27,17 +27,33 @@ type Exercise struct {
 	TargetMuscles pq.StringArray `json:"target_muscles" gorm:"type:text[]"`
 }
 
-// ExerciseLog represents a user logging a specific workout.
-type ExerciseLog struct {
-	ID              uuid.UUID `json:"id"               gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	UserID          uuid.UUID `json:"user_id"          gorm:"index;not null;constraint:OnDelete:CASCADE;"`
-	ExerciseID      string    `json:"exercise_id"      gorm:"index;not null"`
-	PerformedDate   time.Time `json:"performed_date"   gorm:"type:date;not null"`
-	DurationMinutes int       `json:"duration_minutes" gorm:"not null"`
-	CaloriesBurned  float64   `json:"calories_burned"`
-	LoggedAt        time.Time `json:"logged_at"        gorm:"autoCreateTime"`
+// MetActivity represents static exercises with predefined MET values (e.g. running, cycling).
+type MetActivity struct {
+	ID           string  `json:"id"             gorm:"primaryKey"`
+	ActivityName string  `json:"activity_name"  gorm:"not null;uniqueIndex"`
+	MetValue     float64 `json:"met_value"      gorm:"not null"`
+	Category     string  `json:"category"`
+}
 
-	Exercise Exercise `json:"exercise" gorm:"foreignKey:ExerciseID"`
+// WorkoutLog records a single workout session performed by a user.
+// ExerciseID is stored as a plain string — DO NOT add a foreignKey tag here
+// because the ID originates from the external RapidAPI AscendAPI and is
+// NOT guaranteed to exist in our local exercises table.
+type WorkoutLog struct {
+	ID              uint      `json:"id"               gorm:"primaryKey;autoIncrement"`
+	UserID          uuid.UUID `json:"user_id"          gorm:"type:uuid;index;not null"`
+	ExerciseID      string    `json:"exercise_id"      gorm:"type:varchar(100);not null"` // plain string, no FK
+	ExerciseName    string    `json:"exercise_name"    gorm:"not null"`
+	DurationMinutes int       `json:"duration_minutes" gorm:"not null"`
+	CaloriesBurned  float64   `json:"calories_burned"  gorm:"not null"`
+	LoggedAt        time.Time `json:"logged_at"        gorm:"autoCreateTime"`
+}
+
+// LogWorkoutRequest is the input DTO for the POST /workouts/log endpoint.
+type LogWorkoutRequest struct {
+	ExerciseID      string `json:"exercise_id"      binding:"required"`
+	ExerciseName    string `json:"exercise_name"    binding:"required"`
+	DurationMinutes int    `json:"duration_minutes" binding:"required,gt=0"`
 }
 
 // WorkoutRepository defines the data access boundary for the workout module.
@@ -48,6 +64,10 @@ type WorkoutRepository interface {
 	UpsertExercises(ctx context.Context, exercises []Exercise) error
 	// CountByMuscle returns how many exercises are cached for a muscle group.
 	CountByMuscle(ctx context.Context, muscle string) (int64, error)
+	// LogWorkout persists a WorkoutLog record.
+	LogWorkout(ctx context.Context, log *WorkoutLog) error
+	// GetDailyBurnedCalories aggregates all calories burned by a user on a given date.
+	GetDailyBurnedCalories(ctx context.Context, userID uuid.UUID, date time.Time) (float64, error)
 }
 
 // WorkoutUseCase defines the core business logic for the workout module.
@@ -55,6 +75,8 @@ type WorkoutRepository interface {
 type WorkoutUseCase interface {
 	GetExercisesByBodyParts(ctx context.Context, bodyParts string) ([]ExerciseListItem, error)
 	GetExerciseByID(ctx context.Context, id string) (*ExerciseDetail, error)
+	// LogWorkout calculates calories burned and persists the workout session.
+	LogWorkout(ctx context.Context, userID uuid.UUID, req *LogWorkoutRequest) (*WorkoutLog, error)
 }
 
 // ─── NEW PROXY DTOs ──────────────────────────────────────────────────────────

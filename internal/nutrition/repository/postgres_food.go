@@ -169,3 +169,73 @@ func (r *postgresNutritionRepository) WithTransaction(ctx context.Context, fn fu
 	})
 }
 
+type dailySum struct {
+	Day   string  `gorm:"column:day"`
+	Total float64 `gorm:"column:total"`
+}
+
+// GetWeeklyConsumed returns SUM(calories_consumed) per calendar day from food_logs
+// for the given user over the last `days` days (inclusive of today).
+func (r *postgresNutritionRepository) GetWeeklyConsumed(ctx context.Context, userID uuid.UUID, days int) (map[string]float64, error) {
+	var rows []dailySum
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT TO_CHAR(consumed_date, 'YYYY-MM-DD') AS day,
+		       COALESCE(SUM(calories_consumed), 0)  AS total
+		FROM   food_logs
+		WHERE  user_id      = ?
+		  AND  consumed_date >= CURRENT_DATE - INTERVAL '1 day' * ?
+		GROUP  BY day
+		ORDER  BY day
+	`, userID, days-1).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]float64, len(rows))
+	for _, r := range rows {
+		out[r.Day] = r.Total
+	}
+	return out, nil
+}
+
+// GetWeeklyBurned returns SUM(calories_burned) per calendar day from workout_logs
+// for the given user over the last `days` days (inclusive of today).
+func (r *postgresNutritionRepository) GetWeeklyBurned(ctx context.Context, userID uuid.UUID, days int) (map[string]float64, error) {
+	var rows []dailySum
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT TO_CHAR(DATE(logged_at), 'YYYY-MM-DD') AS day,
+		       COALESCE(SUM(calories_burned), 0)       AS total
+		FROM   workout_logs
+		WHERE  user_id   = ?
+		  AND  DATE(logged_at) >= CURRENT_DATE - INTERVAL '1 day' * ?
+		GROUP  BY day
+		ORDER  BY day
+	`, userID, days-1).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]float64, len(rows))
+	for _, r := range rows {
+		out[r.Day] = r.Total
+	}
+	return out, nil
+}
+
+func (r *postgresNutritionRepository) GetMealLogForUpdate(ctx context.Context, logID, userID uuid.UUID) (*domain.MealLog, error) {
+	var log domain.MealLog
+	err := r.db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Preload("Food").
+		First(&log, "id = ? AND user_id = ?", logID, userID).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domain.ErrLogNotFound
+		}
+		return nil, domain.ErrInternalServerError
+	}
+	return &log, nil
+}
+
+func (r *postgresNutritionRepository) UpdateMealLog(ctx context.Context, log *domain.MealLog) error {
+	return r.db.WithContext(ctx).Save(log).Error
+}
+

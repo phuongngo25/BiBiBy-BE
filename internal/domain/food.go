@@ -81,8 +81,21 @@ type CreateFoodRequest struct {
 type DailyPlanResponse struct {
 	TargetCalories   float64   `json:"target_calories"`
 	ConsumedCalories float64   `json:"consumed_calories"`
+	BurnedCalories   float64   `json:"burned_calories"` // Total burned via workout logs today
 	LoggedMeals      []MealLog `json:"logged_meals"`
 	RecommendedFoods []Food    `json:"recommended_foods"`
+}
+
+// DailyAnalytics holds aggregated nutrition data for a single calendar day.
+type DailyAnalytics struct {
+	Date     string  `json:"date"`     // YYYY-MM-DD
+	Consumed float64 `json:"consumed"` // total kcal from meal_logs
+	Burned   float64 `json:"burned"`   // total kcal from workout_logs
+}
+
+// WeeklyAnalyticsResponse is the payload for GET /nutrition/analytics/weekly.
+type WeeklyAnalyticsResponse struct {
+	Days []DailyAnalytics `json:"days"`
 }
 
 // NutritionRepository defines the data access boundary.
@@ -97,6 +110,12 @@ type NutritionRepository interface {
 	UpsertFoods(ctx context.Context, foods []Food) error
 	LogMeal(ctx context.Context, log *MealLog) error
 	GetDailyLogs(ctx context.Context, userID uuid.UUID, date time.Time) ([]MealLog, error)
+	// GetWeeklyConsumed returns per-day SUM(calories_consumed) from food_logs for the last n days.
+	GetWeeklyConsumed(ctx context.Context, userID uuid.UUID, days int) (map[string]float64, error)
+	// GetWeeklyBurned returns per-day SUM(calories_burned) from workout_logs for the last n days.
+	GetWeeklyBurned(ctx context.Context, userID uuid.UUID, days int) (map[string]float64, error)
+	GetMealLogForUpdate(ctx context.Context, logID, userID uuid.UUID) (*MealLog, error)
+	UpdateMealLog(ctx context.Context, log *MealLog) error
 }
 
 // NutritionUseCase defines the core business logic boundary for nutrition operations.
@@ -108,4 +127,6 @@ type NutritionUseCase interface {
 	CreateFood(ctx context.Context, req *CreateFoodRequest) (*Food, error)
 	LogMeal(ctx context.Context, userID uuid.UUID, req *LogMealRequest) (*MealLog, error)
 	GetDailyPlan(ctx context.Context, userID uuid.UUID) (*DailyPlanResponse, error)
+	GetWeeklyAnalytics(ctx context.Context, userID uuid.UUID) (*WeeklyAnalyticsResponse, error)
+	UpdateFoodLog(ctx context.Context, userID, logID uuid.UUID, quantity float64) (*MealLog, error)
 }

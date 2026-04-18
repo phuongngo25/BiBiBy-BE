@@ -29,12 +29,20 @@ func RunMigrations(db *gorm.DB) error {
 		return err
 	}
 
+	// Clean up legacy workout table
+	if err := db.Exec("DROP TABLE IF EXISTS exercise_logs CASCADE;").Error; err != nil {
+		return err
+	}
+
 	return db.AutoMigrate(
 		&domain.User{},
 		&domain.Food{},
 		&domain.MealLog{},
 		&domain.Exercise{},
-		&domain.ExerciseLog{},
+		&domain.MetActivity{}, // Added for JSON seeder
+		&domain.WorkoutLog{},  // Added for new workout logging feature
+		&domain.DRI{},
+		&domain.RefreshToken{},
 	)
 }
 
