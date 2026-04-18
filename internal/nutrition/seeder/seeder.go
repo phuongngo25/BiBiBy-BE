@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gorm.io/datatypes"
@@ -51,9 +52,9 @@ type VFAFoodDTO struct {
 
 // VFA Dishes DB (vfa_dishes_db.json)
 type VFADishNutrientDTO struct {
-	NameEn string  `json:"nameEn"`
-	Amount float64 `json:"amount"`
-	Unit   string  `json:"unit_name"`
+	NameEn string `json:"nameEn"`
+	Amount any    `json:"amount"`
+	Unit   string `json:"unit_name"`
 }
 
 type VFADishDTO struct {
@@ -87,7 +88,49 @@ func SeedBaseTruthData(db *gorm.DB) error {
 		log.Printf("WARNING: Failed to seed USDA Foods -> %v\n", err)
 	}
 
+	log.Println("[Seeder] Generating Dietary Reference Intakes (DRIs)...")
+	if err := seedDRIs(db, filepath.Join(cwd, "DRIs.json")); err != nil {
+		log.Printf("WARNING: Failed to seed DRIs -> %v\n", err)
+	}
+
 	log.Println("[Seeder] Batch UPSERT complete!")
+	return nil
+}
+
+// -------------------------------------------------------------------------
+// DRI Parsing Logic
+// -------------------------------------------------------------------------
+
+func seedDRIs(db *gorm.DB, path string) error {
+	var count int64
+	db.Model(&domain.DRI{}).Count(&count)
+	if count > 0 {
+		return nil // skip if already seeded
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open file error: %w", err)
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	if err := assertJsonArray(decoder); err != nil {
+		return err
+	}
+
+	var batch []domain.DRI
+	for decoder.More() {
+		var dto domain.DRI
+		if err := decoder.Decode(&dto); err != nil {
+			return fmt.Errorf("decode error: %w", err)
+		}
+		batch = append(batch, dto)
+	}
+	
+	if len(batch) > 0 {
+		return db.Create(&batch).Error
+	}
 	return nil
 }
 
@@ -202,17 +245,27 @@ func seedVFADish(db *gorm.DB, path string) error {
 
 		for _, nut := range dto.NutritionalComponents {
 			nName := strings.ToLower(nut.NameEn)
+			
+			var amount float64
+			switch val := nut.Amount.(type) {
+			case float64:
+				amount = val
+			case string:
+				parsed, _ := strconv.ParseFloat(strings.TrimSpace(val), 64)
+				amount = parsed
+			}
+
 			switch {
 			case strings.Contains(nName, "energy"):
-				food.CaloriesPer100g = nut.Amount
+				food.CaloriesPer100g = amount
 			case nName == "protein":
-				food.ProteinPer100g = nut.Amount
+				food.ProteinPer100g = amount
 			case strings.Contains(nName, "lipid") || strings.Contains(nName, "fat"):
-				food.FatPer100g = nut.Amount
+				food.FatPer100g = amount
 			case strings.Contains(nName, "carbohydrate"):
-				food.CarbsPer100g = nut.Amount
+				food.CarbsPer100g = amount
 			default:
-				food.Micronutrients[nut.NameEn] = fmt.Sprintf("%f %s", nut.Amount, nut.Unit)
+				food.Micronutrients[nut.NameEn] = fmt.Sprintf("%f %s", amount, nut.Unit)
 			}
 		}
 
