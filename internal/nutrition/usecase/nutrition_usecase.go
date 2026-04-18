@@ -16,11 +16,12 @@ import (
 type nutritionUseCase struct {
 	repo        domain.NutritionRepository
 	spoonClient *spoonacular.Client
+	workoutRepo domain.WorkoutRepository
 }
 
 // NewNutritionUseCase creates the usecase wired with the nutrition repository and Spoonacular client.
-func NewNutritionUseCase(repo domain.NutritionRepository, spoonClient *spoonacular.Client) domain.NutritionUseCase {
-	return &nutritionUseCase{repo: repo, spoonClient: spoonClient}
+func NewNutritionUseCase(repo domain.NutritionRepository, spoonClient *spoonacular.Client, workoutRepo domain.WorkoutRepository) domain.NutritionUseCase {
+	return &nutritionUseCase{repo: repo, spoonClient: spoonClient, workoutRepo: workoutRepo}
 }
 
 // SearchFoods is the "Local First, API Second" entrypoint (GET /nutrition/foods/search?q=).
@@ -212,13 +213,74 @@ func (u *nutritionUseCase) GetDailyPlan(ctx context.Context, userID uuid.UUID) (
 		suggestions = []domain.Food{}
 	}
 
+	burnedKcal, _ := u.workoutRepo.GetDailyBurnedCalories(ctx, userID, today)
+
 	return &domain.DailyPlanResponse{
 		TargetCalories:   2000.0,
 		ConsumedCalories: consumedCalories,
+		BurnedCalories:   burnedKcal,
 		LoggedMeals:      logs,
 		RecommendedFoods: suggestions,
 	}, nil
 }
+
+// GetWeeklyAnalytics returns exactly 7 DailyAnalytics entries for the last 7
+// days (6 days ago → today). Days with no data are filled with zeros.
+func (u *nutritionUseCase) GetWeeklyAnalytics(ctx context.Context, userID uuid.UUID) (*domain.WeeklyAnalyticsResponse, error) {
+	const numDays = 7
+
+	// Fetch both maps concurrently for minimal latency
+	type result struct {
+		data map[string]float64
+		err  error
+	}
+	cCh := make(chan result, 1)
+	bCh := make(chan result, 1)
+
+	go func() {
+		d, err := u.repo.GetWeeklyConsumed(ctx, userID, numDays)
+		cCh <- result{d, err}
+	}()
+	go func() {
+		d, err := u.repo.GetWeeklyBurned(ctx, userID, numDays)
+		bCh <- result{d, err}
+	}()
+
+	cRes := <-cCh
+	bRes := <-bCh
+
+	if cRes.err != nil {
+		return nil, cRes.err
+	}
+	if bRes.err != nil {
+		return nil, bRes.err
+	}
+
+	consumed := cRes.data
+	if consumed == nil {
+		consumed = map[string]float64{}
+	}
+	burned := bRes.data
+	if burned == nil {
+		burned = map[string]float64{}
+	}
+
+	// Build the exactly-7-entry slice from 6 days ago → today
+	days := make([]domain.DailyAnalytics, numDays)
+	today := time.Now()
+	for i := 0; i < numDays; i++ {
+		d := today.AddDate(0, 0, -(numDays-1-i))
+		key := d.Format("2006-01-02")
+		days[i] = domain.DailyAnalytics{
+			Date:     key,
+			Consumed: consumed[key], // 0 if absent
+			Burned:   burned[key],   // 0 if absent
+		}
+	}
+
+	return &domain.WeeklyAnalyticsResponse{Days: days}, nil
+}
+
 
 // ---------------------------------------------------------------------------
 // Mapping helpers — translate Spoonacular DTOs → domain.Food entities
@@ -277,4 +339,44 @@ func mapIngredientResultsToFoods(results []spoonacular.IngredientSearchResult) [
 		})
 	}
 	return foods
+}
+func (u *nutritionUseCase) UpdateFoodLog(ctx context.Context, userID, logID uuid.UUID, quantity float64) (*domain.MealLog, error) {
+	// 1. Strict Validation
+	if quantity <= 0 || quantity > 5000 {
+		return nil, domain.ErrInvalidQuantity
+	}
+
+	var updatedLog *domain.MealLog
+
+	// 2. Concurrency Control (Transaction)
+	err := u.repo.WithTransaction(ctx, func(txRepo domain.NutritionRepository) error {
+		// 3. Pessimistic Locking + Ownership check (Anti-Enumeration via ErrLogNotFound)
+		log, err := txRepo.GetMealLogForUpdate(ctx, logID, userID)
+		if err != nil {
+			return err
+		}
+
+		// 4. Recalculate Snapshot Macros
+		// Assuming base nutrition is per 100g
+		ratio := quantity / 100.0
+		log.QuantityGrams = quantity
+		log.CaloriesConsumed = log.Food.CaloriesPer100g * ratio
+		log.ProteinConsumed = log.Food.ProteinPer100g * ratio
+		log.FatConsumed = log.Food.FatPer100g * ratio
+		log.CarbsConsumed = log.Food.CarbsPer100g * ratio
+
+		// 5. Atomic Update
+		if err := txRepo.UpdateMealLog(ctx, log); err != nil {
+			return err
+		}
+
+		updatedLog = log
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return updatedLog, nil
 }

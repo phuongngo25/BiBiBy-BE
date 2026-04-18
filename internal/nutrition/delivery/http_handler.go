@@ -1,6 +1,7 @@
 package delivery
 
 import (
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -30,6 +31,8 @@ func NewNutritionHandler(rg *gin.RouterGroup, uc domain.NutritionUseCase) {
 	rg.GET("/nutrition/search-spoonacular", h.SearchSpoonacular)
 	rg.GET("/nutrition/search-by-nutrients", h.SearchByNutrients)
 	rg.GET("/nutrition/search-by-ingredients", h.SearchByIngredients)
+	rg.GET("/nutrition/analytics/weekly", h.GetWeeklyAnalytics)
+	rg.PUT("/nutrition/logs/:id", h.UpdateFoodLog)
 }
 
 // SearchFoods godoc
@@ -188,4 +191,65 @@ func (h *NutritionHandler) UploadFoodImage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"image_url": "/" + savePath})
+}
+
+// GetWeeklyAnalytics godoc
+// GET /api/v1/nutrition/analytics/weekly
+// Returns exactly 7 DailyAnalytics entries (6 days ago → today), including days
+// with zero data so the flutter chart always has a full dataset.
+func (h *NutritionHandler) GetWeeklyAnalytics(c *gin.Context) {
+	userIDStr := middleware.GetUserID(c)
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID in token"})
+		return
+	}
+
+	analytics, err := h.uc.GetWeeklyAnalytics(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, analytics)
+}
+// UpdateFoodLog godoc
+// PUT /api/v1/nutrition/logs/:id
+func (h *NutritionHandler) UpdateFoodLog(c *gin.Context) {
+	userIDStr := middleware.GetUserID(c)
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	logID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid log ID format"})
+		return
+	}
+
+	var req struct {
+		QuantityGrams float64 `json:"quantity_grams" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	updatedLog, err := h.uc.UpdateFoodLog(c.Request.Context(), userID, logID, req.QuantityGrams)
+	if err != nil {
+		if errors.Is(err, domain.ErrLogNotFound) {
+			// Anti-enumeration: return 404 if not found OR not owned by user
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidQuantity) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, updatedLog)
 }

@@ -5,8 +5,10 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"nutrix-backend/internal/domain"
+	"nutrix-backend/pkg/middleware"
 )
 
 // WorkoutHandler manages the REST endpoints for the workout module.
@@ -16,8 +18,9 @@ type WorkoutHandler struct {
 
 // NewWorkoutHandler registers the workout routes onto the provided protected RouterGroup.
 //
-//	GET /api/v1/exercises?bodyparts=pectorals
-//	GET /api/v1/exercises/:id
+//	GET  /api/v1/exercises?bodyparts=pectorals
+//	GET  /api/v1/exercises/:id
+//	POST /api/v1/workouts/log
 func NewWorkoutHandler(rg *gin.RouterGroup, useCase domain.WorkoutUseCase) {
 	handler := &WorkoutHandler{useCase: useCase}
 
@@ -26,18 +29,18 @@ func NewWorkoutHandler(rg *gin.RouterGroup, useCase domain.WorkoutUseCase) {
 		workoutGroup.GET("", handler.GetExercisesByBodyParts)
 		workoutGroup.GET("/:id", handler.GetExerciseByID)
 	}
+
+	logGroup := rg.Group("/workouts")
+	{
+		logGroup.POST("/log", handler.LogWorkout)
+	}
 }
 
 // GetExercisesByBodyParts handles GET /api/v1/exercises?bodyparts={parts}
-//
-// Query params:
-//   - bodyparts (required): target body part, e.g. "pectorals"
-//   - muscle (legacy): fallback for older clients querying ?muscle=chest
 func (h *WorkoutHandler) GetExercisesByBodyParts(c *gin.Context) {
 	bodyparts := strings.TrimSpace(c.Query("bodyparts"))
 	if bodyparts == "" {
-		// Fallback for Flutter legacy compatibility
-		bodyparts = strings.TrimSpace(c.Query("muscle"))
+		bodyparts = strings.TrimSpace(c.Query("muscle")) // fallback
 	}
 
 	if bodyparts == "" {
@@ -75,3 +78,28 @@ func (h *WorkoutHandler) GetExerciseByID(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, detail)
 }
+
+// LogWorkout handles POST /api/v1/workouts/log
+func (h *WorkoutHandler) LogWorkout(c *gin.Context) {
+	userIDStr := middleware.GetUserID(c)
+	uid, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID format in token"})
+		return
+	}
+
+	var req domain.LogWorkoutRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	workoutLog, err := h.useCase.LogWorkout(c.Request.Context(), uid, &req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, workoutLog)
+}
+
