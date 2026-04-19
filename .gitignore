@@ -99,12 +99,6 @@ lib/generated_plugin_registrant.dart
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 
 ### VisualStudioCode ###
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-!.vscode/*.code-snippets
 
 # Local History for Visual Studio Code
 .history/
@@ -117,4 +111,20 @@ lib/generated_plugin_registrant.dart
 .history
 .ionide
 
+### Executable ###
+*.app
+*.bat
+*.cgi
+*.com
+*.exe
+*.gadget
+*.jar
+*.pif
+*.vb
+*.wsf
+
 # End of https://www.toptal.com/developers/gitignore/api/flutter,visualstudiocode,dart
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore

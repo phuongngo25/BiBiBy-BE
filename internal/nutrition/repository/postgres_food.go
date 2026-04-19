@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,10 +34,50 @@ func (r *postgresNutritionRepository) GetFoodByID(ctx context.Context, id uuid.U
 	return &food, nil
 }
 
-// SearchFoods handles fetching foods matching the given keyword (case-insensitive).
+// SearchFoods implements Fuzzy Logic + Relevance Ranking against the local DB.
+//
+// Matching rules (OR — any match qualifies):
+//   - name_en ILIKE '%query%'   (substring, case-insensitive)
+//   - name_vi ILIKE '%query%'
+//   - similarity(name_en, query) > 0.2   (pg_trgm fuzzy — catches typos)
+//
+// Relevance ordering (best match first):
+//  1. Exact match        → name_en ILIKE 'query'     (score 0)
+//  2. Prefix match       → name_en ILIKE 'query%'    (score 1)
+//  3. Fuzzy/substring    → ranked by similarity() DESC
+//  3b. Length tiebreaker → LENGTH(name_en) ASC
+//
+// Hard cap: 50 results.
 func (r *postgresNutritionRepository) SearchFoods(ctx context.Context, keyword string) ([]domain.Food, error) {
+	if len(strings.TrimSpace(keyword)) < 2 {
+		return []domain.Food{}, nil
+	}
+
+	const searchSQL = `
+		SELECT * FROM foods
+		WHERE
+			name_en ILIKE '%' || ? || '%'
+			OR name_vi ILIKE '%' || ? || '%'
+			OR similarity(name_en, ?) > 0.2
+		ORDER BY
+			(name_en ILIKE ?)                DESC,
+			(name_en ILIKE ? || '%')         DESC,
+			similarity(name_en, ?)           DESC,
+			LENGTH(name_en)                  ASC
+		LIMIT 50
+	`
+
 	var foods []domain.Food
-	err := r.db.WithContext(ctx).Where("name ILIKE ?", "%"+keyword+"%").Find(&foods).Error
+	err := r.db.WithContext(ctx).Raw(
+		searchSQL,
+		keyword, // ILIKE '%?%' name_en
+		keyword, // ILIKE '%?%' name_vi
+		keyword, // similarity(name_en, ?)
+		keyword, // exact: name_en ILIKE ?
+		keyword, // prefix: name_en ILIKE ?%
+		keyword, // similarity ORDER BY
+	).Scan(&foods).Error
+
 	if err != nil {
 		return nil, domain.ErrInternalServerError
 	}
@@ -126,5 +167,75 @@ func (r *postgresNutritionRepository) WithTransaction(ctx context.Context, fn fu
 		txRepo := &postgresNutritionRepository{db: tx}
 		return fn(txRepo)
 	})
+}
+
+type dailySum struct {
+	Day   string  `gorm:"column:day"`
+	Total float64 `gorm:"column:total"`
+}
+
+// GetWeeklyConsumed returns SUM(calories_consumed) per calendar day from food_logs
+// for the given user over the last `days` days (inclusive of today).
+func (r *postgresNutritionRepository) GetWeeklyConsumed(ctx context.Context, userID uuid.UUID, days int) (map[string]float64, error) {
+	var rows []dailySum
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT TO_CHAR(consumed_date, 'YYYY-MM-DD') AS day,
+		       COALESCE(SUM(calories_consumed), 0)  AS total
+		FROM   food_logs
+		WHERE  user_id      = ?
+		  AND  consumed_date >= CURRENT_DATE - INTERVAL '1 day' * ?
+		GROUP  BY day
+		ORDER  BY day
+	`, userID, days-1).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]float64, len(rows))
+	for _, r := range rows {
+		out[r.Day] = r.Total
+	}
+	return out, nil
+}
+
+// GetWeeklyBurned returns SUM(calories_burned) per calendar day from workout_logs
+// for the given user over the last `days` days (inclusive of today).
+func (r *postgresNutritionRepository) GetWeeklyBurned(ctx context.Context, userID uuid.UUID, days int) (map[string]float64, error) {
+	var rows []dailySum
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT TO_CHAR(DATE(logged_at), 'YYYY-MM-DD') AS day,
+		       COALESCE(SUM(calories_burned), 0)       AS total
+		FROM   workout_logs
+		WHERE  user_id   = ?
+		  AND  DATE(logged_at) >= CURRENT_DATE - INTERVAL '1 day' * ?
+		GROUP  BY day
+		ORDER  BY day
+	`, userID, days-1).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]float64, len(rows))
+	for _, r := range rows {
+		out[r.Day] = r.Total
+	}
+	return out, nil
+}
+
+func (r *postgresNutritionRepository) GetMealLogForUpdate(ctx context.Context, logID, userID uuid.UUID) (*domain.MealLog, error) {
+	var log domain.MealLog
+	err := r.db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Preload("Food").
+		First(&log, "id = ? AND user_id = ?", logID, userID).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domain.ErrLogNotFound
+		}
+		return nil, domain.ErrInternalServerError
+	}
+	return &log, nil
+}
+
+func (r *postgresNutritionRepository) UpdateMealLog(ctx context.Context, log *domain.MealLog) error {
+	return r.db.WithContext(ctx).Save(log).Error
 }
 

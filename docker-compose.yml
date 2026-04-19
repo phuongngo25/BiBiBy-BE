@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: nutrix-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: your_password_here
+      POSTGRES_DB: nutrix
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - nutrix-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: nutrix-redis
+    ports:
+      - "6379:6379"
+    # Hardened Configuration: Persistence, Auth, and OOM Protection
+    command: >
+      redis-server 
+      --requirepass ${REDIS_PASSWORD:-nutrix-redis-secret} 
+      --appendonly yes 
+      --maxmemory 256mb 
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - nutrix-network
+
+networks:
+  nutrix-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
