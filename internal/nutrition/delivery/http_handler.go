@@ -33,6 +33,9 @@ func NewNutritionHandler(rg *gin.RouterGroup, uc domain.NutritionUseCase) {
 	rg.GET("/nutrition/search-by-ingredients", h.SearchByIngredients)
 	rg.GET("/nutrition/analytics/weekly", h.GetWeeklyAnalytics)
 	rg.PUT("/nutrition/logs/:id", h.UpdateFoodLog)
+	
+	// Orchestrator Job Status API
+	rg.GET("/jobs/:id", h.GetJobStatus)
 }
 
 // SearchFoods godoc
@@ -252,4 +255,37 @@ func (h *NutritionHandler) UpdateFoodLog(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, updatedLog)
+}
+
+// GetJobStatus godoc
+// GET /api/v1/jobs/:id
+func (h *NutritionHandler) GetJobStatus(c *gin.Context) {
+	jobID := c.Param("id")
+	if jobID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "job id is required"})
+		return
+	}
+
+	// Assuming UseCase proxy for JobStore lookup
+	job, err := h.uc.GetJobStatus(c.Request.Context(), jobID)
+	if err != nil {
+		// Replace this with standard err check later
+		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		return
+	}
+
+	// Strict Production API Contract mapping
+	response := gin.H{
+		"id":         job.ID,
+		"job_type":   job.Type, // Explicit mapping
+		"status":     job.Status,
+		"done":       job.Done,
+		"updated_at": job.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"), // Strict RFC3339
+	}
+	
+	if job.Error != "" {
+		response["error"] = job.Error
+	}
+
+	c.JSON(http.StatusOK, response)
 }

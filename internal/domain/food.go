@@ -129,4 +129,15 @@ type NutritionUseCase interface {
 	GetDailyPlan(ctx context.Context, userID uuid.UUID) (*DailyPlanResponse, error)
 	GetWeeklyAnalytics(ctx context.Context, userID uuid.UUID) (*WeeklyAnalyticsResponse, error)
 	UpdateFoodLog(ctx context.Context, userID, logID uuid.UUID, quantity float64) (*MealLog, error)
+	GetJobStatus(ctx context.Context, jobID string) (*JobStatusResponse, error)
+}
+
+// JobStatusResponse represents the unified DTO for external API consumers checking orchestrator jobs.
+type JobStatusResponse struct {
+	ID        string
+	Type      string
+	Status    string
+	Done      bool
+	Error     string
+	UpdatedAt time.Time
 }

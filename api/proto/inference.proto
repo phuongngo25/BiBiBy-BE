@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package nutrix.inference;
+
+option go_package = "nutrix/inference/v1;inferencev1";
+
+// ---------------------------------------------------------------------------
+// NutriX Inference Service
+//
+// Contract:
+//   - Client sends raw image bytes (NOT Base64). Binary-efficient over HTTP/2.
+//   - Server returns volume estimate with confidence and request tracing ID.
+//   - Max payload: 12 MB (enforced server-side; see config.py).
+//   - Deadline/timeout should be set by the client (recommended: 30s).
+// ---------------------------------------------------------------------------
+
+service InferenceService {
+  // Unary RPC: single image in, single volume estimate out.
+  rpc EstimateVolume (EstimateVolumeRequest) returns (EstimateVolumeResponse);
+}
+
+message EstimateVolumeRequest {
+  // Raw image bytes (JPEG/PNG). Do NOT Base64-encode.
+  // Server will reject payloads exceeding the configured limit.
+  bytes image_data = 1;
+}
+
+message EstimateVolumeResponse {
+  // Server-generated request ID for end-to-end tracing.
+  string request_id = 1;
+
+  // Estimated food volume in cubic centimeters (cm³).
+  float volume_cm3 = 2;
+
+  // Model confidence score [0.0, 1.0].
+  float confidence = 3;
+
+  // Total server-side latency for this request in milliseconds.
+  float latency_ms = 4;
+}
