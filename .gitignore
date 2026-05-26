@@ -128,5 +128,6 @@ lib/generated_plugin_registrant.dart
 *.pif
 *.vb
 *.wsf
-
+*.zip
+*.json  
 # End of https://www.toptal.com/developers/gitignore/api/flutter,visualstudiocode,dart
