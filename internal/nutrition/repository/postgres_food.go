@@ -239,3 +239,26 @@ func (r *postgresNutritionRepository) UpdateMealLog(ctx context.Context, log *do
 	return r.db.WithContext(ctx).Save(log).Error
 }
 
+// LogWater inserts a WaterLog record into the database.
+func (r *postgresNutritionRepository) LogWater(ctx context.Context, log *domain.WaterLog) error {
+	return r.db.WithContext(ctx).Create(log).Error
+}
+
+// GetDailyConsumedWater fetches the sum of all water amounts for a given user on a calendar day.
+func (r *postgresNutritionRepository) GetDailyConsumedWater(ctx context.Context, userID uuid.UUID, date time.Time) (int, error) {
+	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
+	endOfDay := startOfDay.Add(24 * time.Hour)
+
+	var total int
+	err := r.db.WithContext(ctx).
+		Model(&domain.WaterLog{}).
+		Select("COALESCE(SUM(amount_ml), 0)").
+		Where("user_id = ? AND created_at >= ? AND created_at < ?", userID, startOfDay, endOfDay).
+		Scan(&total).Error
+
+	if err != nil {
+		return 0, domain.ErrInternalServerError
+	}
+	return total, nil
+}
+

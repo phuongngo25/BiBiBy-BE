@@ -74,6 +74,30 @@ func (m *mockWorkoutRepo) GetDailyBurnedCalories(ctx context.Context, userID uui
 	return m.burned, nil
 }
 
+type mockUserRepo struct{}
+
+func (m *mockUserRepo) Create(ctx context.Context, user *domain.User) error { return nil }
+func (m *mockUserRepo) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
+	return nil, nil
+}
+func (m *mockUserRepo) GetByUsername(ctx context.Context, username string) (*domain.User, error) {
+	return nil, nil
+}
+func (m *mockUserRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
+	return &domain.User{TDEE: 2000.0}, nil
+}
+func (m *mockUserRepo) UpdateProfile(ctx context.Context, id uuid.UUID, req *domain.UpdateProfileRequest) error {
+	return nil
+}
+func (m *mockUserRepo) SaveRefreshToken(ctx context.Context, rt *domain.RefreshToken) error { return nil }
+func (m *mockUserRepo) GetRefreshTokenByHash(ctx context.Context, hash string) (*domain.RefreshToken, error) {
+	return nil, nil
+}
+func (m *mockUserRepo) RevokeRefreshToken(ctx context.Context, oldHash string, replacedByHash *string) error {
+	return nil
+}
+func (m *mockUserRepo) RevokeFamily(ctx context.Context, familyID uuid.UUID) error { return nil }
+
 // --- Tests ---
 
 func TestGetDailyPlan_BurnedCalories(t *testing.T) {
@@ -88,7 +112,7 @@ func TestGetDailyPlan_BurnedCalories(t *testing.T) {
 	}
 	workoutRepo := &mockWorkoutRepo{burned: 450.5}
 
-	uc := usecase.NewNutritionUseCase(nutriRepo, nil, workoutRepo)
+	uc := usecase.NewNutritionUseCase(nutriRepo, nil, workoutRepo, &mockUserRepo{})
 
 	plan, err := uc.GetDailyPlan(ctx, userID)
 	if err != nil {
@@ -110,7 +134,7 @@ func TestGetWeeklyAnalytics_ExactlySevenPoints(t *testing.T) {
 
 	nutriRepo := &mockNutritionRepo{} // empty → all days default to 0
 	workoutRepo := &mockWorkoutRepo{}
-	uc := usecase.NewNutritionUseCase(nutriRepo, nil, workoutRepo)
+	uc := usecase.NewNutritionUseCase(nutriRepo, nil, workoutRepo, &mockUserRepo{})
 
 	resp, err := uc.GetWeeklyAnalytics(ctx, userID)
 	if err != nil {
@@ -145,7 +169,7 @@ func TestGetWeeklyAnalytics_SumsCorrect(t *testing.T) {
 		},
 	}
 	workoutRepo := &mockWorkoutRepo{}
-	uc := usecase.NewNutritionUseCase(nutriRepo, nil, workoutRepo)
+	uc := usecase.NewNutritionUseCase(nutriRepo, nil, workoutRepo, &mockUserRepo{})
 
 	resp, err := uc.GetWeeklyAnalytics(ctx, userID)
 	if err != nil {

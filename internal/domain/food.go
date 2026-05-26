@@ -82,6 +82,8 @@ type DailyPlanResponse struct {
 	TargetCalories   float64   `json:"target_calories"`
 	ConsumedCalories float64   `json:"consumed_calories"`
 	BurnedCalories   float64   `json:"burned_calories"` // Total burned via workout logs today
+	TargetWater      int       `json:"target_water"`    // <--- Hydration
+	ConsumedWater    int       `json:"consumed_water"`  // <--- Hydration
 	LoggedMeals      []MealLog `json:"logged_meals"`
 	RecommendedFoods []Food    `json:"recommended_foods"`
 }
@@ -116,6 +118,10 @@ type NutritionRepository interface {
 	GetWeeklyBurned(ctx context.Context, userID uuid.UUID, days int) (map[string]float64, error)
 	GetMealLogForUpdate(ctx context.Context, logID, userID uuid.UUID) (*MealLog, error)
 	UpdateMealLog(ctx context.Context, log *MealLog) error
+	
+	// Hydration Methods
+	LogWater(ctx context.Context, log *WaterLog) error
+	GetDailyConsumedWater(ctx context.Context, userID uuid.UUID, date time.Time) (int, error)
 }
 
 // NutritionUseCase defines the core business logic boundary for nutrition operations.
@@ -130,6 +136,9 @@ type NutritionUseCase interface {
 	GetWeeklyAnalytics(ctx context.Context, userID uuid.UUID) (*WeeklyAnalyticsResponse, error)
 	UpdateFoodLog(ctx context.Context, userID, logID uuid.UUID, quantity float64) (*MealLog, error)
 	GetJobStatus(ctx context.Context, jobID string) (*JobStatusResponse, error)
+	
+	// Hydration Methods
+	LogWater(ctx context.Context, userID uuid.UUID, req *LogWaterRequest) (*LogWaterResponse, error)
 }
 
 // JobStatusResponse represents the unified DTO for external API consumers checking orchestrator jobs.

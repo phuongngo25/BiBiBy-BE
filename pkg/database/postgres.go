@@ -43,6 +43,7 @@ func RunMigrations(db *gorm.DB) error {
 		&domain.WorkoutLog{},  // Added for new workout logging feature
 		&domain.DRI{},
 		&domain.RefreshToken{},
+		&domain.WaterLog{},    // Added for hydration tracking feature
 	)
 }
 

@@ -107,7 +107,7 @@ func main() {
 	// -------------------------------------------------------------------------
 	// 5. DEPENDENCY INJECTION — UseCases
 	// -------------------------------------------------------------------------
-	nutritionUCInst := nutritionUC.NewNutritionUseCase(nutritionRepoInst, spoonClient, workoutRepoInst)
+	nutritionUCInst := nutritionUC.NewNutritionUseCase(nutritionRepoInst, spoonClient, workoutRepoInst, uRepo)
 	uUC := userUC.NewUserUseCase(uRepo, driRepoInst, nutritionRepoInst, workoutRepoInst, cfg.JWTSecret, cfg.JWTExpirationHours)
 	workoutUCInst := workoutUC.NewWorkoutUseCase(workoutRepoInst, exerciseClient, uRepo)
 

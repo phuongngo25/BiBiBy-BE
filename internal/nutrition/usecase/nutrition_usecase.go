@@ -17,11 +17,12 @@ type nutritionUseCase struct {
 	repo        domain.NutritionRepository
 	spoonClient *spoonacular.Client
 	workoutRepo domain.WorkoutRepository
+	userRepo    domain.UserRepository
 }
 
-// NewNutritionUseCase creates the usecase wired with the nutrition repository and Spoonacular client.
-func NewNutritionUseCase(repo domain.NutritionRepository, spoonClient *spoonacular.Client, workoutRepo domain.WorkoutRepository) domain.NutritionUseCase {
-	return &nutritionUseCase{repo: repo, spoonClient: spoonClient, workoutRepo: workoutRepo}
+// NewNutritionUseCase creates the usecase wired with the nutrition repository, Spoonacular client, workout repository and user repository.
+func NewNutritionUseCase(repo domain.NutritionRepository, spoonClient *spoonacular.Client, workoutRepo domain.WorkoutRepository, userRepo domain.UserRepository) domain.NutritionUseCase {
+	return &nutritionUseCase{repo: repo, spoonClient: spoonClient, workoutRepo: workoutRepo, userRepo: userRepo}
 }
 
 // SearchFoods is the "Local First, API Second" entrypoint (GET /nutrition/foods/search?q=).
@@ -215,10 +216,28 @@ func (u *nutritionUseCase) GetDailyPlan(ctx context.Context, userID uuid.UUID) (
 
 	burnedKcal, _ := u.workoutRepo.GetDailyBurnedCalories(ctx, userID, today)
 
+	targetCalories := 2000.0
+	targetWater := 2000
+	userProfile, err := u.userRepo.GetByID(ctx, userID)
+	if err == nil && userProfile != nil {
+		if userProfile.TDEE > 0 {
+			targetCalories = userProfile.TDEE
+		}
+		targetWater = domain.CalculateDailyWaterTarget(*userProfile)
+	}
+
+	consumedWater := 0
+	cw, err := u.repo.GetDailyConsumedWater(ctx, userID, today)
+	if err == nil {
+		consumedWater = cw
+	}
+
 	return &domain.DailyPlanResponse{
-		TargetCalories:   2000.0,
+		TargetCalories:   targetCalories,
 		ConsumedCalories: consumedCalories,
 		BurnedCalories:   burnedKcal,
+		TargetWater:      targetWater,
+		ConsumedWater:    consumedWater,
 		LoggedMeals:      logs,
 		RecommendedFoods: suggestions,
 	}, nil
@@ -396,5 +415,33 @@ func (u *nutritionUseCase) GetJobStatus(ctx context.Context, jobID string) (*dom
 		Done:      true,
 		Error:     "panic: runtime error: invalid memory address or nil pointer dereference",
 		UpdatedAt: time.Now(),
+	}, nil
+}
+
+// LogWater records a hydration event for the user.
+func (u *nutritionUseCase) LogWater(ctx context.Context, userID uuid.UUID, req *domain.LogWaterRequest) (*domain.LogWaterResponse, error) {
+	if req.AmountMl <= 0 || req.AmountMl > 2000 {
+		return nil, domain.ErrInvalidQuantity
+	}
+	source := strings.TrimSpace(req.Source)
+	if len(source) > 50 {
+		source = source[:50]
+	}
+
+	log := &domain.WaterLog{
+		UserID:   userID,
+		AmountMl: req.AmountMl,
+		Source:   source,
+	}
+
+	if err := u.repo.LogWater(ctx, log); err != nil {
+		return nil, domain.ErrInternalServerError
+	}
+
+	return &domain.LogWaterResponse{
+		ID:        log.ID,
+		AmountMl:  log.AmountMl,
+		Source:    log.Source,
+		CreatedAt: log.CreatedAt,
 	}, nil
 }

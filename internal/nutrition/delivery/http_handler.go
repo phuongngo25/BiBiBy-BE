@@ -28,6 +28,7 @@ func NewNutritionHandler(rg *gin.RouterGroup, uc domain.NutritionUseCase) {
 	rg.POST("/nutrition/foods", h.CreateFood)
 	rg.GET("/nutrition/daily-plan", h.GetDailyPlan)
 	rg.POST("/nutrition/log-meal", h.LogMeal)
+	rg.POST("/nutrition/log-water", h.LogWater)
 	rg.GET("/nutrition/search-spoonacular", h.SearchSpoonacular)
 	rg.GET("/nutrition/search-by-nutrients", h.SearchByNutrients)
 	rg.GET("/nutrition/search-by-ingredients", h.SearchByIngredients)
@@ -149,6 +150,34 @@ func (h *NutritionHandler) LogMeal(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, mealLog)
+}
+
+// LogWater godoc
+// POST /api/v1/nutrition/log-water
+func (h *NutritionHandler) LogWater(c *gin.Context) {
+	userIDStr := middleware.GetUserID(c)
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID in token"})
+		return
+	}
+
+	var req domain.LogWaterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp, err := h.uc.LogWater(c.Request.Context(), userID, &req)
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidQuantity) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, resp)
 }
 
 // GetDailyPlan godoc
