@@ -132,7 +132,7 @@ type NutritionUseCase interface {
 	SearchByIngredients(ctx context.Context, ingredients string) ([]Food, error)
 	CreateFood(ctx context.Context, req *CreateFoodRequest) (*Food, error)
 	LogMeal(ctx context.Context, userID uuid.UUID, req *LogMealRequest) (*MealLog, error)
-	GetDailyPlan(ctx context.Context, userID uuid.UUID) (*DailyPlanResponse, error)
+	GetDailyPlan(ctx context.Context, userID uuid.UUID, dateStr string) (*DailyPlanResponse, error)
 	GetWeeklyAnalytics(ctx context.Context, userID uuid.UUID) (*WeeklyAnalyticsResponse, error)
 	UpdateFoodLog(ctx context.Context, userID, logID uuid.UUID, quantity float64) (*MealLog, error)
 	GetJobStatus(ctx context.Context, jobID string) (*JobStatusResponse, error)

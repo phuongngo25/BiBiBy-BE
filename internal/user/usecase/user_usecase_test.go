@@ -164,6 +164,12 @@ func (m *mockNutritionRepo) GetWeeklyConsumed(_ context.Context, _ uuid.UUID, _ 
 func (m *mockNutritionRepo) GetWeeklyBurned(_ context.Context, _ uuid.UUID, _ int) (map[string]float64, error) {
 	return nil, nil
 }
+func (m *mockNutritionRepo) LogWater(_ context.Context, _ *domain.WaterLog) error {
+	return nil
+}
+func (m *mockNutritionRepo) GetDailyConsumedWater(_ context.Context, _ uuid.UUID, _ time.Time) (int, error) {
+	return 0, nil
+}
 
 type mockWorkoutRepo struct{}
 

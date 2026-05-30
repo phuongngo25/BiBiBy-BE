@@ -1,0 +1,28 @@
+services:
+  spark-master:
+    image: apache/spark:3.5.1 # <-- Dùng ảnh chính thức của Apache
+    environment:
+      - SPARK_MODE=master
+    ports:
+      - '8080:8080' # Web UI của Master
+      - '7077:7077' # Cổng RPC để Worker và App kết nối
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+
+  spark-worker:
+    image: apache/spark:3.5.1 # <-- Dùng ảnh chính thức của Apache
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=1
+    depends_on:
+      - spark-master
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G

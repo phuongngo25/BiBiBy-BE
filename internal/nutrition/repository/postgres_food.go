@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 	"time"
 
@@ -150,6 +151,9 @@ func (r *postgresNutritionRepository) GetDailyLogs(ctx context.Context, userID u
 	startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	endOfDay := startOfDay.Add(24 * time.Hour)
 
+	log.Printf("[DAILY_PLAN] queryStart=%v", startOfDay)
+	log.Printf("[DAILY_PLAN] queryEnd=%v", endOfDay)
+
 	err := r.db.WithContext(ctx).
 		Preload("Food").
 		Where("user_id = ? AND consumed_date >= ? AND consumed_date < ?", userID, startOfDay, endOfDay).
@@ -158,6 +162,12 @@ func (r *postgresNutritionRepository) GetDailyLogs(ctx context.Context, userID u
 	if err != nil {
 		return nil, domain.ErrInternalServerError
 	}
+
+	log.Printf("[DAILY_PLAN] mealsReturned=%d", len(logs))
+	for _, meal := range logs {
+		log.Printf("[DAILY_PLAN] meal=%s consumedDate=%v", meal.Food.Name, meal.ConsumedDate)
+	}
+
 	return logs, nil
 }
 

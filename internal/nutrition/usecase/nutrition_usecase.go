@@ -196,25 +196,31 @@ func (u *nutritionUseCase) LogMeal(ctx context.Context, userID uuid.UUID, req *d
 	return mealLog, nil
 }
 
-// GetDailyPlan builds a summary of today's consumed macros and suggests new foods.
-func (u *nutritionUseCase) GetDailyPlan(ctx context.Context, userID uuid.UUID) (*domain.DailyPlanResponse, error) {
-	today := time.Now()
-	logs, err := u.repo.GetDailyLogs(ctx, userID, today)
+// GetDailyPlan builds a summary of a specific day's consumed macros and suggests new foods.
+func (u *nutritionUseCase) GetDailyPlan(ctx context.Context, userID uuid.UUID, dateStr string) (*domain.DailyPlanResponse, error) {
+	requestedDate, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid date format: %w", err)
+	}
+	log.Printf("[DAILY_PLAN] parsedDate=%v", requestedDate)
+
+	logs, err := u.repo.GetDailyLogs(ctx, userID, requestedDate)
 	if err != nil {
 		return nil, err
 	}
 
 	var consumedCalories float64
-	for _, log := range logs {
-		consumedCalories += log.CaloriesConsumed
+	for _, l := range logs {
+		consumedCalories += l.CaloriesConsumed
 	}
+	log.Printf("[DAILY_PLAN] mealsReturned=%d consumedCalories=%.1f", len(logs), consumedCalories)
 
 	suggestions, err := u.repo.GetRandomFoods(ctx, 5)
 	if err != nil {
 		suggestions = []domain.Food{}
 	}
 
-	burnedKcal, _ := u.workoutRepo.GetDailyBurnedCalories(ctx, userID, today)
+	burnedKcal, _ := u.workoutRepo.GetDailyBurnedCalories(ctx, userID, requestedDate)
 
 	targetCalories := 2000.0
 	targetWater := 2000
@@ -227,7 +233,7 @@ func (u *nutritionUseCase) GetDailyPlan(ctx context.Context, userID uuid.UUID) (
 	}
 
 	consumedWater := 0
-	cw, err := u.repo.GetDailyConsumedWater(ctx, userID, today)
+	cw, err := u.repo.GetDailyConsumedWater(ctx, userID, requestedDate)
 	if err == nil {
 		consumedWater = cw
 	}
@@ -242,6 +248,7 @@ func (u *nutritionUseCase) GetDailyPlan(ctx context.Context, userID uuid.UUID) (
 		RecommendedFoods: suggestions,
 	}, nil
 }
+
 
 // GetWeeklyAnalytics returns exactly 7 DailyAnalytics entries for the last 7
 // days (6 days ago → today). Days with no data are filled with zeros.

@@ -55,6 +55,12 @@ func (m *mockNutritionRepo) GetWeeklyConsumed(_ context.Context, _ uuid.UUID, _ 
 func (m *mockNutritionRepo) GetWeeklyBurned(_ context.Context, _ uuid.UUID, _ int) (map[string]float64, error) {
 	return m.weeklyBurned, nil
 }
+func (m *mockNutritionRepo) LogWater(_ context.Context, _ *domain.WaterLog) error {
+	return nil
+}
+func (m *mockNutritionRepo) GetDailyConsumedWater(_ context.Context, _ uuid.UUID, _ time.Time) (int, error) {
+	return 0, nil
+}
 
 type mockWorkoutRepo struct {
 	burned float64
@@ -114,7 +120,7 @@ func TestGetDailyPlan_BurnedCalories(t *testing.T) {
 
 	uc := usecase.NewNutritionUseCase(nutriRepo, nil, workoutRepo, &mockUserRepo{})
 
-	plan, err := uc.GetDailyPlan(ctx, userID)
+	plan, err := uc.GetDailyPlan(ctx, userID, time.Now().Format("2006-01-02"))
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

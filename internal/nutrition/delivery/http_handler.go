@@ -1,11 +1,15 @@
 package delivery
 
 import (
+	"bytes"
 	"errors"
+	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -155,6 +159,7 @@ func (h *NutritionHandler) LogMeal(c *gin.Context) {
 // LogWater godoc
 // POST /api/v1/nutrition/log-water
 func (h *NutritionHandler) LogWater(c *gin.Context) {
+	log.Println("[WATER] handler entered")
 	userIDStr := middleware.GetUserID(c)
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
@@ -162,8 +167,13 @@ func (h *NutritionHandler) LogWater(c *gin.Context) {
 		return
 	}
 
+	body, _ := io.ReadAll(c.Request.Body)
+	log.Printf("[WATER] raw body=%s", string(body))
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
+
 	var req domain.LogWaterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[WATER] BindJSON error: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -181,7 +191,7 @@ func (h *NutritionHandler) LogWater(c *gin.Context) {
 }
 
 // GetDailyPlan godoc
-// GET /api/v1/nutrition/daily-plan
+// GET /api/v1/nutrition/daily-plan?date=YYYY-MM-DD
 func (h *NutritionHandler) GetDailyPlan(c *gin.Context) {
 	userIDStr := middleware.GetUserID(c)
 	userID, err := uuid.Parse(userIDStr)
@@ -190,13 +200,27 @@ func (h *NutritionHandler) GetDailyPlan(c *gin.Context) {
 		return
 	}
 
-	plan, err := h.uc.GetDailyPlan(c.Request.Context(), userID)
+	dateStr := c.Query("date")
+	if dateStr == "" {
+		dateStr = time.Now().Format("2006-01-02")
+	}
+	log.Printf("[DAILY_PLAN] requestedDate=%s", dateStr)
+
+	// Validate format early so we can return a clean 400
+	if _, errParse := time.Parse("2006-01-02", dateStr); errParse != nil {
+		log.Printf("[DAILY_PLAN] invalid date format: %v", errParse)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid date format, expected YYYY-MM-DD"})
+		return
+	}
+
+	plan, err := h.uc.GetDailyPlan(c.Request.Context(), userID, dateStr)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, plan)
 }
+
 
 // UploadFoodImage godoc
 // POST /api/v1/nutrition/foods/upload-image
