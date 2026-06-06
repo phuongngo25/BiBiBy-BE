@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             v7.35.0--rc2
-// source: api/proto/inference.proto
+// source: inference.proto
 
 package inferencev1
 
@@ -159,5 +159,5 @@ var InferenceService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "api/proto/inference.proto",
+	Metadata: "inference.proto",
 }

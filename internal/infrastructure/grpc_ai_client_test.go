@@ -49,3 +49,65 @@ func TestGrpcAIClient_EstimateVolume(t *testing.T) {
 		t.Errorf("MassG is 0, which means density mismatch still exists or is unhandled")
 	}
 }
+
+func TestGrpcAIClient_AnalyzeMealImage(t *testing.T) {
+	client, err := infrastructure.NewGrpcAIClient("localhost:50051")
+	if err != nil {
+		t.Fatalf("Failed to create grpc client: %v", err)
+	}
+	defer func() {
+		if closer, ok := client.(interface{ Close() error }); ok {
+			closer.Close()
+		}
+	}()
+
+	imageBytes, err := ioutil.ReadFile("../../uploads/pho.png")
+	if err != nil {
+		t.Fatalf("Failed to read image: %v", err)
+	}
+
+	testCases := []struct {
+		name         string
+		userDiseases []string
+	}{
+		{
+			name:         "Healthy User",
+			userDiseases: []string{},
+		},
+		{
+			name:         "Seafood Allergy User",
+			userDiseases: []string{"D_SEAFOOD_ALLERGY"},
+		},
+		{
+			name:         "Diabetes User",
+			userDiseases: []string{"D_DIABETES"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			result, err := client.AnalyzeMealImage(ctx, imageBytes, tc.userDiseases)
+			if err != nil {
+				t.Fatalf("AnalyzeMealImage failed: %v", err)
+			}
+
+			log.Printf("--- %s ---", tc.name)
+			log.Printf("Request:")
+			log.Printf("  Image: pho.png")
+			log.Printf("  Diseases: %v", tc.userDiseases)
+			log.Printf("Response:")
+			log.Printf("  FoodLabel: %s (%.2f)", result.FoodLabel, result.FoodLabelConfidence)
+			log.Printf("  VolumeCm3: %.2f | MassG: %.2f", result.VolumeCm3, result.MassG)
+			log.Printf("  Ingredients: %v", result.Ingredients)
+			log.Printf("  Safe: %v", result.Safe)
+			log.Printf("  RiskLevel: %s", result.RiskLevel)
+			log.Printf("  Violations: %+v", result.Violations)
+			log.Printf("  EvidencePaths: %v", result.EvidencePaths)
+			log.Printf("  Recommendations: %+v", result.Recommendations)
+			log.Printf("------------------------------------------------")
+		})
+	}
+}

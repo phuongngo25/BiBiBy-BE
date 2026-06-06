@@ -17,6 +17,64 @@ option go_package = "nutrix/inference/v1;inferencev1";
 service InferenceService {
   // Unary RPC: single image in, single volume estimate out.
   rpc EstimateVolume (EstimateVolumeRequest) returns (EstimateVolumeResponse);
+
+  // Consolidated E2E Pipeline: Image -> CV -> Enrichment -> KG Reasoning -> Recommendation
+  rpc AnalyzeMealImage (AnalyzeMealImageRequest) returns (AnalyzeMealImageResponse);
+}
+
+message AnalyzeMealImageRequest {
+  // Raw image bytes (JPEG/PNG). Do NOT Base64-encode.
+  bytes image_data = 1;
+  // Optional user context for KG reasoning (e.g. "diabetes", "hypertension")
+  repeated string user_diseases = 2;
+}
+
+message AnalyzeMealImageResponse {
+  string request_id = 1;
+  
+  // Computer Vision Output
+  string food_label = 2;
+  float food_label_confidence = 3;
+  float volume_cm3 = 4;
+  float mass_g = 5;
+
+  // Knowledge Graph / Enrichment Output
+  repeated string ingredients = 6;
+  bool safe = 7;
+  RiskLevel risk_level = 8;
+  repeated Violation violations = 9;
+  repeated Recommendation recommendations = 10;
+  
+  // Observability
+  float latency_ms = 11;
+
+  // Reasoning
+  repeated EvidencePath evidence_paths = 12;
+}
+
+enum RiskLevel {
+  RISK_UNKNOWN = 0;
+  RISK_SAFE = 1;
+  RISK_WARNING = 2;
+  RISK_CRITICAL = 3;
+}
+
+message EvidencePath {
+  repeated string nodes = 1;
+}
+
+message Violation {
+  string disease_id = 1;
+  string disease_name = 2;
+  string severity = 3;
+  string explanation = 4;
+}
+
+message Recommendation {
+  string food_id = 1;
+  string food_name = 2;
+  float score = 3;
+  string reason = 4;
 }
 
 message EstimateVolumeRequest {
