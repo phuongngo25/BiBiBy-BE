@@ -19,7 +19,9 @@ import (
 
 	nutritionDelivery "nutrix-backend/internal/nutrition/delivery"
 	nutritionRepo "nutrix-backend/internal/nutrition/repository"
+	nutritionSvc "nutrix-backend/internal/nutrition/service"
 	nutritionUC "nutrix-backend/internal/nutrition/usecase"
+	"nutrix-backend/internal/infrastructure"
 
 	userDelivery "nutrix-backend/internal/user/delivery"
 	userRepo "nutrix-backend/internal/user/repository"
@@ -97,19 +99,35 @@ func main() {
 	nutritionRepoInst := nutritionRepo.NewPostgresNutritionRepository(db)
 	driRepoInst := nutritionRepo.NewPostgresDRIRepository(db)
 	uRepo := userRepo.NewPostgresUserRepository(db, cfg.EncryptionKeys, cfg.ActiveKeyVersion, cfg.HMACKey)
+	streakRepoInst := nutritionRepo.NewPostgresStreakRepository(db)
+	achievementRepoInst := nutritionRepo.NewPostgresAchievementRepository(db)
 
 	// -------------------------------------------------------------------------
 	// 4. DEPENDENCY INJECTION — External Clients
 	// -------------------------------------------------------------------------
 	spoonClient := spoonacular.NewClient(cfg.SpoonacularAPIKey)
 	exerciseClient := rapidapi.NewExerciseClient(cfg.RapidAPIKey)
+	aiClient, aiErr := infrastructure.NewGrpcAIClient("localhost:50051")
+	if aiErr != nil {
+		log.Printf("[SRE] AI Client unavailable: %v", aiErr)
+	}
+
+	// -------------------------------------------------------------------------
+	// 4.5 DEPENDENCY INJECTION — Streak Service
+	// -------------------------------------------------------------------------
+	analyticsSvc := nutritionSvc.NewAnalyticsAggregationService(nutritionRepoInst, uRepo)
+	streakSvc := nutritionSvc.NewStreakEvaluationService(nutritionRepoInst, streakRepoInst, uRepo, analyticsSvc)
 
 	// -------------------------------------------------------------------------
 	// 5. DEPENDENCY INJECTION — UseCases
 	// -------------------------------------------------------------------------
-	nutritionUCInst := nutritionUC.NewNutritionUseCase(nutritionRepoInst, spoonClient, workoutRepoInst, uRepo)
+	nutritionUCInst := nutritionUC.NewNutritionUseCase(nutritionRepoInst, streakRepoInst, achievementRepoInst, spoonClient, workoutRepoInst, uRepo, aiClient)
 	uUC := userUC.NewUserUseCase(uRepo, driRepoInst, nutritionRepoInst, workoutRepoInst, cfg.JWTSecret, cfg.JWTExpirationHours)
-	workoutUCInst := workoutUC.NewWorkoutUseCase(workoutRepoInst, exerciseClient, uRepo)
+	workoutUCInst := workoutUC.NewWorkoutUseCase(workoutRepoInst, exerciseClient, uRepo, streakSvc)
+
+	// Gamification UseCase
+	gamificationSvc := nutritionSvc.NewGamificationService(achievementRepoInst, streakRepoInst, analyticsSvc, uRepo)
+	gamificationUCInst := nutritionUC.NewGamificationUseCase(achievementRepoInst, gamificationSvc)
 
 	// -------------------------------------------------------------------------
 	// 5. HTTP ROUTER & SECURITY MIDDLEWARES
@@ -187,6 +205,7 @@ func main() {
 	protected.Use(middleware.RequireAuth(cfg.JWTSecret))
 	{
 		nutritionDelivery.NewNutritionHandler(protected, nutritionUCInst)
+		nutritionDelivery.NewGamificationHandler(protected, gamificationUCInst)
 		userDelivery.RegisterProfileRoutes(protected, uUC)
 		workoutDelivery.NewWorkoutHandler(protected, workoutUCInst)
 	}

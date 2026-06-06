@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NutriX KG Architecture Addendum v3</title>
+<style>
+body{font-family:Arial,sans-serif;max-width:1200px;margin:auto;padding:24px;line-height:1.6}
+h1,h2{color:#1f3a5f}
+pre{background:#f4f4f4;padding:12px;border-radius:6px;overflow:auto}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ccc;padding:8px}
+th{background:#eee}
+.section{margin-bottom:40px}
+</style>
+</head>
+<body>
+<h1>NutriX KG Architecture Addendum v3</h1>
+<p>Supplemental specification to reach Architecture Frozen status.</p>
+
+<div class="section">
+<h2>1. Formula Evaluation Architecture</h2>
+<h3>Goals</h3>
+<ul>
+<li>Support Static Thresholds</li>
+<li>Support Severity Thresholds</li>
+<li>Support Formula Thresholds</li>
+<li>Support Versioned Clinical Guidelines</li>
+</ul>
+
+<pre>
+Formula Registry
+ ├─ protein_ckd_v1
+ ├─ water_general_v1
+ ├─ sodium_htn_v2
+ └─ calories_goal_v1
+
+Formula Engine
+ ├─ Variable Resolver
+ ├─ Unit Validator
+ ├─ Formula Evaluator
+ └─ Audit Logger
+</pre>
+
+<h3>Variable Sources</h3>
+<table>
+<tr><th>Variable</th><th>Source</th></tr>
+<tr><td>weight</td><td>User Profile</td></tr>
+<tr><td>height</td><td>User Profile</td></tr>
+<tr><td>age</td><td>User Profile</td></tr>
+<tr><td>bmr</td><td>HealthCalculationService</td></tr>
+<tr><td>tdee</td><td>HealthCalculationService</td></tr>
+<tr><td>activity_factor</td><td>User Profile</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h2>2. Recommendation Scoring Specification</h2>
+
+<table>
+<tr><th>Component</th><th>Weight</th></tr>
+<tr><td>Disease Safety</td><td>40%</td></tr>
+<tr><td>Nutrition Budget Fit</td><td>25%</td></tr>
+<tr><td>Goal Alignment</td><td>20%</td></tr>
+<tr><td>User Preference</td><td>10%</td></tr>
+<tr><td>Diet Variety</td><td>5%</td></tr>
+</table>
+
+<pre>
+FinalScore =
+DiseaseSafetyScore * 0.40 +
+BudgetFitScore * 0.25 +
+GoalFitScore * 0.20 +
+PreferenceScore * 0.10 +
+VarietyScore * 0.05
+</pre>
+
+<p>CRITICAL violations are hard filtered before scoring.</p>
+</div>
+
+<div class="section">
+<h2>3. User Preference Model</h2>
+
+<pre>
+UserPreferenceProfile
+ ├─ preferred_cuisines
+ ├─ disliked_foods
+ ├─ dietary_patterns
+ ├─ allergies
+ ├─ religious_restrictions
+ └─ favorite_ingredients
+</pre>
+
+<table>
+<tr><th>Preference</th><th>Effect</th></tr>
+<tr><td>Preferred Cuisine</td><td>Positive score boost</td></tr>
+<tr><td>Disliked Food</td><td>Negative score penalty</td></tr>
+<tr><td>Dietary Pattern</td><td>Hard or soft filtering</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h2>4. Graph Projection Mapping</h2>
+
+<table>
+<tr><th>PostgreSQL</th><th>Neo4j Node</th></tr>
+<tr><td>foods</td><td>Food</td></tr>
+<tr><td>ingredients</td><td>Ingredient</td></tr>
+<tr><td>food_categories</td><td>FoodCategory</td></tr>
+<tr><td>diseases</td><td>Disease</td></tr>
+<tr><td>constraint_rules</td><td>ConstraintRule</td></tr>
+</table>
+
+<h3>Relationships</h3>
+<pre>
+Food -[:CONTAINS]-> Ingredient
+Ingredient -[:BELONGS_TO]-> FoodCategory
+Disease -[:HAS_RULE]-> ConstraintRule
+ConstraintRule -[:TARGETS]-> FoodCategory
+ConstraintRule -[:LIMITS]-> Nutrient
+</pre>
+</div>
+
+<div class="section">
+<h2>5. Deployment Architecture</h2>
+
+<pre>
+Docker Compose
+
+kg-api
+kg-worker
+kg-scheduler
+postgres
+neo4j
+redis
+</pre>
+
+<h3>Responsibilities</h3>
+<table>
+<tr><th>Service</th><th>Responsibility</th></tr>
+<tr><td>kg-api</td><td>FastAPI endpoints</td></tr>
+<tr><td>kg-worker</td><td>Enrichment and projection jobs</td></tr>
+<tr><td>kg-scheduler</td><td>Periodic maintenance tasks</td></tr>
+<tr><td>postgres</td><td>Source of truth</td></tr>
+<tr><td>neo4j</td><td>Graph projection</td></tr>
+<tr><td>redis</td><td>Queue and cache</td></tr>
+</table>
+</div>
+
+</body>
+</html>

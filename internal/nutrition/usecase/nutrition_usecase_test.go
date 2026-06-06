@@ -61,6 +61,40 @@ func (m *mockNutritionRepo) LogWater(_ context.Context, _ *domain.WaterLog) erro
 func (m *mockNutritionRepo) GetDailyConsumedWater(_ context.Context, _ uuid.UUID, _ time.Time) (int, error) {
 	return 0, nil
 }
+func (m *mockNutritionRepo) GetOrCreateSnapshot(ctx context.Context, snapshot *domain.DailyHealthSnapshot) (*domain.DailyHealthSnapshot, error) {
+	return snapshot, nil
+}
+func (m *mockNutritionRepo) GetFirstSnapshotDate(ctx context.Context, userID uuid.UUID) (time.Time, error) {
+	return time.Time{}, nil
+}
+func (m *mockNutritionRepo) GetSnapshotRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]domain.DailyHealthSnapshot, error) {
+	return nil, nil
+}
+func (m *mockNutritionRepo) GetConsumedRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]domain.DailyCalorieAggregate, error) {
+	var aggregates []domain.DailyCalorieAggregate
+	for k, v := range m.weeklyConsumed {
+		t, _ := time.Parse("2006-01-02", k)
+		aggregates = append(aggregates, domain.DailyCalorieAggregate{
+			Day:   t,
+			Total: int(v),
+		})
+	}
+	return aggregates, nil
+}
+func (m *mockNutritionRepo) GetBurnedRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]domain.DailyCalorieAggregate, error) {
+	var aggregates []domain.DailyCalorieAggregate
+	for k, v := range m.weeklyBurned {
+		t, _ := time.Parse("2006-01-02", k)
+		aggregates = append(aggregates, domain.DailyCalorieAggregate{
+			Day:   t,
+			Total: int(v),
+		})
+	}
+	return aggregates, nil
+}
+func (m *mockNutritionRepo) GetWaterRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]domain.DailyWaterAggregate, error) {
+	return nil, nil
+}
 
 type mockWorkoutRepo struct {
 	burned float64
@@ -118,7 +152,7 @@ func TestGetDailyPlan_BurnedCalories(t *testing.T) {
 	}
 	workoutRepo := &mockWorkoutRepo{burned: 450.5}
 
-	uc := usecase.NewNutritionUseCase(nutriRepo, nil, workoutRepo, &mockUserRepo{})
+	uc := usecase.NewNutritionUseCase(nutriRepo, nil, nil, nil, workoutRepo, &mockUserRepo{}, nil)
 
 	plan, err := uc.GetDailyPlan(ctx, userID, time.Now().Format("2006-01-02"))
 	if err != nil {
@@ -133,16 +167,16 @@ func TestGetDailyPlan_BurnedCalories(t *testing.T) {
 }
 
 // TestGetWeeklyAnalytics_ExactlySevenPoints verifies that the response always
-// contains exactly 7 DailyAnalytics entries even when the DB has no data.
+// contains exactly 7 DayAnalytics entries even when the DB has no data.
 func TestGetWeeklyAnalytics_ExactlySevenPoints(t *testing.T) {
 	ctx := context.Background()
 	userID := uuid.New()
 
 	nutriRepo := &mockNutritionRepo{} // empty → all days default to 0
 	workoutRepo := &mockWorkoutRepo{}
-	uc := usecase.NewNutritionUseCase(nutriRepo, nil, workoutRepo, &mockUserRepo{})
+	uc := usecase.NewNutritionUseCase(nutriRepo, nil, nil, nil, workoutRepo, &mockUserRepo{}, nil)
 
-	resp, err := uc.GetWeeklyAnalytics(ctx, userID)
+	resp, err := uc.GetWeeklyAnalytics(ctx, userID, 7, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -150,9 +184,9 @@ func TestGetWeeklyAnalytics_ExactlySevenPoints(t *testing.T) {
 		t.Errorf("expected 7 days, got %d", len(resp.Days))
 	}
 	for _, d := range resp.Days {
-		if d.Consumed != 0 || d.Burned != 0 {
-			t.Errorf("expected zeros for empty day %s, got consumed=%f burned=%f",
-				d.Date, d.Consumed, d.Burned)
+		if d.ConsumedCalories != 0 || d.WorkoutBurned != 0 {
+			t.Errorf("expected zeros for empty day %s, got consumed=%d burned=%d",
+				d.Date, d.ConsumedCalories, d.WorkoutBurned)
 		}
 	}
 }
@@ -175,9 +209,9 @@ func TestGetWeeklyAnalytics_SumsCorrect(t *testing.T) {
 		},
 	}
 	workoutRepo := &mockWorkoutRepo{}
-	uc := usecase.NewNutritionUseCase(nutriRepo, nil, workoutRepo, &mockUserRepo{})
+	uc := usecase.NewNutritionUseCase(nutriRepo, nil, nil, nil, workoutRepo, &mockUserRepo{}, nil)
 
-	resp, err := uc.GetWeeklyAnalytics(ctx, userID)
+	resp, err := uc.GetWeeklyAnalytics(ctx, userID, 7, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -185,21 +219,31 @@ func TestGetWeeklyAnalytics_SumsCorrect(t *testing.T) {
 		t.Fatalf("expected 7 days, got %d", len(resp.Days))
 	}
 
-	dayMap := make(map[string]domain.DailyAnalytics)
+	dayMap := make(map[string]domain.DayAnalytics)
 	for _, d := range resp.Days {
 		dayMap[d.Date] = d
 	}
 
-	if dayMap[today].Consumed != 1200.0 {
-		t.Errorf("today consumed: want 1200.0, got %f", dayMap[today].Consumed)
+	if dayMap[today].ConsumedCalories != 1200 {
+		t.Errorf("today consumed: want 1200, got %d", dayMap[today].ConsumedCalories)
 	}
-	if dayMap[today].Burned != 300.0 {
-		t.Errorf("today burned: want 300.0, got %f", dayMap[today].Burned)
+	if dayMap[today].WorkoutBurned != 300 {
+		t.Errorf("today burned: want 300, got %d", dayMap[today].WorkoutBurned)
 	}
-	if dayMap[yesterday].Consumed != 950.5 {
-		t.Errorf("yesterday consumed: want 950.5, got %f", dayMap[yesterday].Consumed)
+	if dayMap[yesterday].ConsumedCalories != 950 {
+		t.Errorf("yesterday consumed: want 950, got %d", dayMap[yesterday].ConsumedCalories)
 	}
-	if dayMap[yesterday].Burned != 0 {
-		t.Errorf("yesterday burned: want 0, got %f", dayMap[yesterday].Burned)
+	if dayMap[yesterday].WorkoutBurned != 0 {
+		t.Errorf("yesterday burned: want 0, got %d", dayMap[yesterday].WorkoutBurned)
+	}
+}
+
+func TestAIFoodRegistryCoverage(t *testing.T) {
+	// The VNFoodClassifier has exactly 30 classes.
+	// This test prevents developer from adding a label to the AI 
+	// without adding it to the AIFoodRegistry Go map.
+	expectedCount := 30
+	if len(usecase.AIFoodRegistry) != expectedCount {
+		t.Errorf("AIFoodRegistry coverage mismatch: expected %d, got %d", expectedCount, len(usecase.AIFoodRegistry))
 	}
 }

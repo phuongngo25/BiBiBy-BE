@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"time"
 
 	"github.com/google/uuid"
 
 	"nutrix-backend/internal/domain"
+	"nutrix-backend/internal/nutrition/service"
 	"nutrix-backend/pkg/rapidapi"
 )
 
@@ -17,18 +19,21 @@ type workoutUseCase struct {
 	repo           domain.WorkoutRepository
 	exerciseClient *rapidapi.ExerciseClient
 	userRepo       domain.UserRepository // needed to fetch weight_kg for calorie formula
+	streakService  service.StreakEvaluationService
 }
 
-// NewWorkoutUseCase wires the repository, user repository, and RapidAPI client.
+// NewWorkoutUseCase wires the repository, user repository, RapidAPI client, and streak service.
 func NewWorkoutUseCase(
 	repo domain.WorkoutRepository,
 	client *rapidapi.ExerciseClient,
 	userRepo domain.UserRepository,
+	streakService service.StreakEvaluationService,
 ) domain.WorkoutUseCase {
 	return &workoutUseCase{
 		repo:           repo,
 		exerciseClient: client,
 		userRepo:       userRepo,
+		streakService:  streakService,
 	}
 }
 
@@ -108,6 +113,19 @@ func (uc *workoutUseCase) LogWorkout(ctx context.Context, userID uuid.UUID, req 
 
 	log.Printf("[workout] Logged %d min of %q for user %s → %.2f kcal burned",
 		req.DurationMinutes, req.ExerciseName, userID, calories)
+
+	if uc.streakService != nil {
+		go func() {
+			ctxBg, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			_, err := uc.streakService.EvaluateStreak(ctxBg, userID, time.Now())
+			if err != nil {
+				log.Printf("[Streak Hook] WARNING: Streak evaluation failed for user %s on workout: %v", userID, err)
+			} else {
+				log.Printf("[Streak Hook] Success: Streak evaluated for user %s on workout", userID)
+			}
+		}()
+	}
 
 	return workoutLog, nil
 }

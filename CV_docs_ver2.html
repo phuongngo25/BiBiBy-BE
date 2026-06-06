@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NutriX KG - Ultimate Architecture Blueprint</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>mermaid.initialize({startOnLoad:true, theme: 'neutral'});</script>
+    
+    <script>
+    MathJax = {
+      tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] }
+    };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+
+    <style>
+        :root {
+            --primary: #0f172a; --secondary: #334155; --accent: #2563eb;
+            --success: #16a34a; --warning: #d97706; --danger: #dc2626;
+            --bg: #f8fafc; --surface: #ffffff; --text: #334155;
+            --border: #e2e8f0; --code-bg: #1e293b; --code-text: #e2e8f0;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; color: var(--text); background: var(--bg); max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
+        .container { background: var(--surface); padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        h1 { color: var(--primary); border-bottom: 4px solid var(--accent); padding-bottom: 10px; font-size: 2.5em; }
+        h2 { color: var(--secondary); border-bottom: 2px solid var(--border); padding-bottom: 8px; margin-top: 1.5em; }
+        h3 { color: var(--accent); margin-top: 1.2em; }
+        pre { background: var(--code-bg); color: var(--code-text); padding: 16px; border-radius: 8px; overflow-x: auto; font-family: 'Fira Code', Consolas, monospace; font-size: 14px; }
+        code { background: #e2e8f0; color: #b91c1c; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+        pre code { background: none; color: inherit; padding: 0; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid var(--border); padding: 12px; text-align: left; }
+        th { background: var(--primary); color: white; }
+        .diagram-container { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 20px 0; display: flex; justify-content: center; overflow-x: auto; }
+        .badge { padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; color: white; }
+        .badge.frozen { background-color: var(--success); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NutriX KG - Ultimate Architecture Blueprint</h1>
+        <p><span class="badge frozen">ARCHITECTURE FROZEN: 99.9%</span> | <strong>Target:</strong> Full Implementation Guide for Dev Team & AI Assistants</p>
+
+        <h2>1. Constraint DSL & Logical Expressions</h2>
+        <p>Hỗ trợ đầy đủ các toán tử logic (AND, OR, NOT) để biểu diễn các quy tắc đa điều kiện phức tạp.</p>
+        <pre><code class="language-json">{
+  "rule_id": "CKD_STRICT_DIET",
+  "rule_type": "LOGICAL",
+  "operator": "AND",
+  "children": [
+    {
+      "rule_type": "LIMIT",
+      "target_type": "NUTRIENT",
+      "target_key": "N_SODIUM",
+      "operator": "<=",
+      "value_expression": { "type": "STATIC", "value": 1500, "unit": "mg" }
+    },
+    {
+      "rule_type": "LIMIT",
+      "target_type": "NUTRIENT",
+      "target_key": "N_POTASSIUM",
+      "operator": "<=",
+      "value_expression": { "type": "STATIC", "value": 2000, "unit": "mg" }
+    }
+  ]
+}</code></pre>
+
+        <h2>2. Formula Evaluation Architecture</h2>
+        <p>Engine tính toán động độc lập. Xử lý Abstract Syntax Tree (AST) và Validation nghiêm ngặt.</p>
+        <ul>
+            <li><strong>Context Injector:</strong> Nạp các biến số như <code>weight</code>, <code>height</code>, <code>age</code>, <code>bmr</code> từ <code>PatientProfile</code>.</li>
+            <li><strong>Validation Rules:</strong>
+                <ul>
+                    <li>Nếu biến bị <code>null/missing</code> &rarr; Raise <code>MissingContextVariableError</code>. Engine sẽ fallback về cấu hình mặc định an toàn hoặc chặn đánh giá.</li>
+                    <li>Nếu kết quả <code>negative</code> (âm) khi tính ngưỡng dinh dưỡng &rarr; Ép về <code>0.0</code> và ghi log Warning (tránh tính ra Calorie âm).</li>
+                </ul>
+            </li>
+        </ul>
+        <pre><code class="language-python"># Example AST for: 0.6 * weight
+FormulaAST(
+    operator="MULTIPLY",
+    left=Literal(0.6),
+    right=Variable("weight", fallback=None, required=True)
+)</code></pre>
+
+        <h2>3. Category Hierarchy & Ontology Rules</h2>
+        <p>Quy tắc phân cấp thực thể và giải quyết sự nhập nhằng (Ambiguity) trong Knowledge Graph.</p>
+        <ul>
+            <li><strong>Multiple Parents:</strong> Một Ingredient có thể thuộc nhiều Category.</li>
+            <li><strong>Canonical Parent (BẮT BUỘC):</strong> Phải có đúng 1 Category đóng vai trò là cha chính (Primary Path). Ví dụ: <code>Tomato</code> &rarr; Canonical: <code>Fruit</code> | Secondary: <code>Vegetable</code>. Điều này giúp tính điểm trọng số và truy vết đồ thị mượt mà hơn.</li>
+            <li><strong>Cycle Prevention:</strong> Topo-sort DAG validation trước khi lưu.</li>
+        </ul>
+
+        <h2>4. User Preference & Meal Context Model</h2>
+        <p>Mô hình hóa sở thích cá nhân và bối cảnh bữa ăn (Meal Context) để hỗ trợ Recommendation.</p>
+        <pre><code class="language-python">class UserPreferenceProfile:
+    disliked_ingredients: List[str]  # e.g., ["Coriander", "Onion"]
+    preferred_cuisines: List[str]    # e.g., ["Vietnamese", "Japanese"]
+    dietary_style: str               # e.g., "Vegetarian", "Vegan", "Omnivore"
+    religious_restrictions: str      # e.g., "Halal", "Kosher"
+
+class MealContext(Enum):
+    BREAKFAST = "BREAKFAST" # Thường ưu tiên Carbs nhanh, nhẹ bụng
+    LUNCH = "LUNCH"         # Đủ Macros
+    DINNER = "DINNER"       # Ưu tiên Protein, ít Carbs
+    SNACK = "SNACK"         # Calorie thấp
+</code></pre>
+
+        <h2>5. Recommendation Scoring Specification</h2>
+        <p>Công thức xếp hạng (Ranking Formula) đa chiều, loại bỏ hoàn toàn tính chất "Black Box" của AI.</p>
+        
+        $$Total\_Score = (0.4 \times S_{safety}) + (0.25 \times S_{budget}) + (0.2 \times S_{goal}) + (0.1 \times S_{pref}) + (0.05 \times S_{variety})$$
+
+        <table>
+            <tr><th>Component</th><th>Weight</th><th>Logic</th></tr>
+            <tr><td><strong>Disease Safety</strong></td><td>40%</td><td>Trừ 50đ/WARNING. CRITICAL = Khóa 0đ (Loại bỏ).</td></tr>
+            <tr><td><strong>Budget & Meal Context</strong></td><td>25%</td><td>Phạt nặng nếu làm tràn Remaining Budget. Phạt nhẹ nếu món ăn không hợp với <code>MealContext</code> (VD: Ăn lẩu 1000kcal vào bữa sáng).</td></tr>
+            <tr><td><strong>Goal Fit</strong></td><td>20%</td><td>Độ khớp với Macro Balance mong muốn (VD: High Protein cho người tập Gym).</td></tr>
+            <tr><td><strong>Preference Match</strong></td><td>10%</td><td>+10đ nếu hợp Cuisine yêu thích. Khóa 0đ nếu dính Disliked/Religious/Vegetarian.</td></tr>
+            <tr><td><strong>Variety Score</strong></td><td>5%</td><td>Trừ điểm nếu món này User đã ăn trong 2-3 ngày gần đây (tránh ngán).</td></tr>
+        </table>
+
+        <h2>6. Graph Projection Mapping (Postgres &rarr; Neo4j)</h2>
+        <p>Bảng ánh xạ trực tiếp từ Source of Truth sang cấu trúc Node/Edge của Neo4j.</p>
+        <table>
+            <tr><th>Postgres Entity</th><th>Neo4j Node Label</th><th>Properties (Neo4j)</th><th>Neo4j Relationships</th></tr>
+            <tr><td><code>food_knowledge_profiles</code></td><td><code>(:Food)</code></td><td><code>id</code>, <code>name</code>, <code>serving_size</code>, <code>macros</code></td><td><code>-[:CONTAINS]->(:Ingredient)</code><br/><code>-[:BELONGS_TO]->(:Category)</code></td></tr>
+            <tr><td><code>ingredient_master</code></td><td><code>(:Ingredient)</code></td><td><code>id</code>, <code>standard_name</code></td><td><code>-[:BELONGS_TO {type: 'CANONICAL'}]->(:Category)</code></td></tr>
+            <tr><td><code>categories</code></td><td><code>(:Category)</code></td><td><code>id</code>, <code>name</code>, <code>level</code></td><td><code>-[:CHILD_OF]->(:Category)</code></td></tr>
+            <tr><td><code>constraint_rules</code></td><td><code>(:ConstraintRule)</code></td><td><code>id</code>, <code>type</code>, <code>operator</code>, <code>formula</code></td><td><code>(:Disease)-[:HAS_RULE]->(:ConstraintRule)-[:TARGETS]->(:Nutrient/Ingredient)</code></td></tr>
+        </table>
+
+        <h2>7. System Audit & Traceability</h2>
+        <p>Cung cấp bằng chứng cho cả User và Medical Reviewer (Tuân thủ tiêu chuẩn y tế).</p>
+        <pre><code class="language-json">{
+  "audit_trail": {
+    "rule_id": "HTN_SODIUM_LIMIT",
+    "rule_version": "v2.0",
+    "guideline_source": "AHA 2025",
+    "evaluated_at": "2026-06-02T13:00:00Z",
+    "evidence_path": ["Pho Bo", "CONTAINS", "Nuoc Mam", "HIGH_IN", "Sodium"]
+  }
+}</code></pre>
+
+        <h2>8. Deployment Architecture (Docker/K8s Ready)</h2>
+        <p>Kiến trúc triển khai phân tán cho dự án NutriX, tách biệt các Node đọc/ghi và Worker xử lý ngầm.</p>
+        <div class="diagram-container">
+            <div class="mermaid">
+                flowchart TB
+                    subgraph Client Zone
+                        Flutter[Flutter Mobile App]
+                    end
+
+                    subgraph Go Ecosystem
+                        GoAPI[Go Backend API]
+                    end
+
+                    subgraph Python KG Ecosystem
+                        FastAPI[KG REST / gRPC API]
+                        Worker[Celery/RQ Sync Worker]
+                        Scheduler[Cron Scheduler]
+                    end
+
+                    subgraph Persistence Layer
+                        PG[(PostgreSQL<br/>Source of Truth)]
+                        Neo4j[(Neo4j Graph)]
+                        Redis[(Redis<br/>Message Broker/Cache)]
+                    end
+
+                    Flutter -->|REST| GoAPI
+                    GoAPI -->|gRPC| FastAPI
+                    
+                    FastAPI -->|Read/Write| PG
+                    FastAPI -->|Cypher Read| Neo4j
+                    FastAPI -->|Publish Sync Event| Redis
+                    
+                    Redis -->|Consume Event| Worker
+                    Worker -->|Cypher Write| Neo4j
+                    Worker -->|Update Status| PG
+                    
+                    Scheduler -->|Trigger Routine| Redis
+            </div>
+        </div>
+    </div>
+</body>
+</html>

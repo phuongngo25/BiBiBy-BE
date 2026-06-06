@@ -3,10 +3,12 @@ package middleware
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -66,15 +68,31 @@ var (
 	
 	// Global Breaker for Redis Rate Limiter
 	redisBreaker = resilience.NewCircuitBreaker(5, 5*time.Second, 10*time.Second, 2)
+
+	// ErrThrottled is returned when the request rate limit is exceeded
+	ErrThrottled = errors.New("throttled")
+
+	// Lock-free atomic timestamp to throttle fallback log warnings (at most once per 30s)
+	lastWarningTime int64
 )
 
 // RateLimiter implements a Fintech-grade, resilient rate limiting tier.
 // It uses Redis as primary store, but falls back to a memory-safe LRU cache if Redis is down.
 func RateLimiter(rdb *redis.Client, rps int, burst int) gin.HandlerFunc {
-	limiter := redis_rate.NewLimiter(rdb)
+	var limiter *redis_rate.Limiter
+	if rdb != nil {
+		limiter = redis_rate.NewLimiter(rdb)
+	}
 
 	return func(c *gin.Context) {
 		key := getRateLimitKey(c)
+
+		if limiter == nil {
+			// Redis was unavailable at boot, fallback to in-memory LRU immediately
+			handleFallback(c, key)
+			return
+		}
+
 		limit := redis_rate.Limit{
 			Rate:   rps,
 			Burst:  burst,
@@ -96,14 +114,13 @@ func RateLimiter(rdb *redis.Client, rps int, burst int) gin.HandlerFunc {
 				c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 					"error": "Rate limit exceeded. Too many requests.",
 				})
-				return fmt.Errorf("throttled") // Not a Redis failure, but a block
+				return ErrThrottled
 			}
 			return nil
 		})
 
 		if err != nil {
-			// If it's just a throttle (429), the request is already aborted.
-			if err.Error() == "throttled" {
+			if errors.Is(err, ErrThrottled) {
 				return
 			}
 
@@ -129,11 +146,14 @@ func getRateLimitKey(c *gin.Context) string {
 }
 
 func handleFallback(c *gin.Context, key string) {
-	// Circuit Breaker Logging is handled during state transitions in recordFailure (simplified here)
-	if redisBreaker.GetState() == resilience.StateOpen {
-		// Log once during transition or periodically
-	} else {
-		log.Printf("[SRE WARNING] Redis Limiter failed for %s. Degrading to LRU fallback.", key)
+	// Circuit Breaker Logging is handled during state transitions.
+	// Suppress logging warning to at most once per 30 seconds to prevent console spam.
+	now := time.Now().Unix()
+	last := atomic.LoadInt64(&lastWarningTime)
+	if now-last >= 30 {
+		if atomic.CompareAndSwapInt64(&lastWarningTime, last, now) {
+			log.Printf("[SRE WARNING] Redis Limiter is failing. Degrading to LRU fallback (suppressing warning spam for 30s).")
+		}
 	}
 
 	// Stricter In-Memory Fallback

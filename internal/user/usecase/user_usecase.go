@@ -16,6 +16,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"nutrix-backend/internal/domain"
+	"nutrix-backend/internal/nutrition/service"
 	"nutrix-backend/pkg/crypto"
 )
 
@@ -60,7 +61,7 @@ func (u *userUseCase) Register(ctx context.Context, req *domain.RegisterRequest)
 		WeightKg:          req.WeightKg,
 		DOB:               req.DOB,
 		Gender:            req.Gender,
-		ActivityLevel:     req.ActivityLevel,
+		ActivityLevel:     domain.ActivityLevel(req.ActivityLevel),
 		DietaryPreference: req.DietaryPreference,
 		MedicalConditions: req.MedicalConditions,
 	}
@@ -143,8 +144,45 @@ func (u *userUseCase) RefreshTokens(ctx context.Context, req *domain.RefreshRequ
 	return &domain.AuthResponse{Token: accessToken, RefreshToken: newRawRefreshToken, User: *user}, nil
 }
 
-// UpdateProfile delegates profile updates to the repository.
+// UpdateProfile delegates profile updates to the repository, recalculating BMR/TDEE beforehand.
 func (u *userUseCase) UpdateProfile(ctx context.Context, userID uuid.UUID, req *domain.UpdateProfileRequest) error {
+	user, err := u.repo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	weight := user.WeightKg
+	if req.WeightKg != nil {
+		weight = *req.WeightKg
+	}
+	height := user.HeightCm
+	if req.HeightCm != nil {
+		height = *req.HeightCm
+	}
+	dob := user.DOB
+	if req.DOB != nil {
+		dob = req.DOB
+	}
+	gender := user.Gender
+	if req.Gender != "" {
+		gender = req.Gender
+	}
+	activity := user.ActivityLevel
+	if req.ActivityLevel != "" {
+		activity = domain.ActivityLevel(req.ActivityLevel)
+	}
+
+	if weight > 0 && height > 0 && dob != nil {
+		calcService := service.NewHealthCalculationService()
+		bmrVal := calcService.CalculateBMR(weight, height, *dob, gender)
+		tdeeVal := calcService.CalculateTDEE(bmrVal, activity)
+
+		bmrFloat := float64(bmrVal)
+		tdeeFloat := float64(tdeeVal)
+		req.BMR = &bmrFloat
+		req.TDEE = &tdeeFloat
+	}
+
 	return u.repo.UpdateProfile(ctx, userID, req)
 }
 

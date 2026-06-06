@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"math"
 	"strings"
 	"time"
 
@@ -271,4 +272,146 @@ func (r *postgresNutritionRepository) GetDailyConsumedWater(ctx context.Context,
 	}
 	return total, nil
 }
+
+// GetOrCreateSnapshot implements the race-safe retrieval/creation of daily health snapshots.
+// NOTE: This may be called from read-only query endpoints (like Analytics) to dynamically
+// auto-backfill and freeze missing snapshots. This read-side mutation is a deliberate
+// eventually self-healing architectural decision to guarantee historical goal stability.
+// Operation is 100% idempotent.
+func (r *postgresNutritionRepository) GetOrCreateSnapshot(ctx context.Context, snapshot *domain.DailyHealthSnapshot) (*domain.DailyHealthSnapshot, error) {
+	// 1. Attempt UPSERT / DO NOTHING
+	err := r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "user_id"}, {Name: "snapshot_date"}},
+			DoNothing: true,
+		}).
+		Create(snapshot).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Always fetch the true single source of truth for that day
+	var existing domain.DailyHealthSnapshot
+	err = r.db.WithContext(ctx).
+		Where("user_id = ? AND snapshot_date = ?", snapshot.UserID, snapshot.SnapshotDate).
+		First(&existing).Error
+
+	return &existing, err
+}
+
+// GetSnapshotRange retrieves daily health snapshots for a user over a date range.
+func (r *postgresNutritionRepository) GetSnapshotRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]domain.DailyHealthSnapshot, error) {
+	var snapshots []domain.DailyHealthSnapshot
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND snapshot_date >= ? AND snapshot_date <= ?", userID, start, end).
+		Order("snapshot_date ASC").
+		Find(&snapshots).Error
+	return snapshots, err
+}
+
+// GetConsumedRange aggregates consumed calories from food logs over a date range.
+func (r *postgresNutritionRepository) GetConsumedRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]domain.DailyCalorieAggregate, error) {
+	var rows []struct {
+		Day   time.Time
+		Total float64
+	}
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT DATE(consumed_date) AS day,
+		       COALESCE(SUM(calories_consumed), 0) AS total
+		FROM   food_logs
+		WHERE  user_id = ? AND DATE(consumed_date) >= DATE(?) AND DATE(consumed_date) <= DATE(?)
+		GROUP  BY day
+		ORDER  BY day
+	`, userID, start, end).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	
+	aggregates := make([]domain.DailyCalorieAggregate, len(rows))
+	for i, r := range rows {
+		aggregates[i] = domain.DailyCalorieAggregate{
+			Day:   r.Day,
+			Total: int(math.Round(r.Total)),
+		}
+	}
+	return aggregates, nil
+}
+
+// GetBurnedRange aggregates burned calories from workout logs over a date range.
+func (r *postgresNutritionRepository) GetBurnedRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]domain.DailyCalorieAggregate, error) {
+	var rows []struct {
+		Day   time.Time
+		Total float64
+	}
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT DATE(logged_at) AS day,
+		       COALESCE(SUM(calories_burned), 0) AS total
+		FROM   workout_logs
+		WHERE  user_id = ? AND DATE(logged_at) >= DATE(?) AND DATE(logged_at) <= DATE(?)
+		GROUP  BY day
+		ORDER  BY day
+	`, userID, start, end).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	
+	aggregates := make([]domain.DailyCalorieAggregate, len(rows))
+	for i, r := range rows {
+		aggregates[i] = domain.DailyCalorieAggregate{
+			Day:   r.Day,
+			Total: int(math.Round(r.Total)),
+		}
+	}
+	return aggregates, nil
+}
+
+// GetWaterRange aggregates consumed water from water logs over a date range.
+func (r *postgresNutritionRepository) GetWaterRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]domain.DailyWaterAggregate, error) {
+	var rows []struct {
+		Day   time.Time
+		Total int
+	}
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT DATE(created_at) AS day,
+		       COALESCE(SUM(amount_ml), 0) AS total
+		FROM   water_logs
+		WHERE  user_id = ? AND DATE(created_at) >= DATE(?) AND DATE(created_at) <= DATE(?)
+		GROUP  BY day
+		ORDER  BY day
+	`, userID, start, end).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	
+	aggregates := make([]domain.DailyWaterAggregate, len(rows))
+	for i, r := range rows {
+		aggregates[i] = domain.DailyWaterAggregate{
+			Day:   r.Day,
+			Total: r.Total,
+		}
+	}
+	return aggregates, nil
+}
+
+// GetFirstSnapshotDate returns the SnapshotDate of the earliest snapshot for the user.
+// Returns a zero-value time.Time if no snapshots exist.
+func (r *postgresNutritionRepository) GetFirstSnapshotDate(ctx context.Context, userID uuid.UUID) (time.Time, error) {
+	var dates []time.Time
+	err := r.db.WithContext(ctx).
+		Model(&domain.DailyHealthSnapshot{}).
+		Where("user_id = ?", userID).
+		Order("snapshot_date ASC").
+		Limit(1).
+		Pluck("snapshot_date", &dates).Error
+
+	if err != nil {
+		return time.Time{}, err
+	}
+	if len(dates) == 0 {
+		return time.Time{}, nil
+	}
+	return dates[0], nil
+}
+
 

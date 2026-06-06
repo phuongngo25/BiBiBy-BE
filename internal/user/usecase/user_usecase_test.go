@@ -170,6 +170,24 @@ func (m *mockNutritionRepo) LogWater(_ context.Context, _ *domain.WaterLog) erro
 func (m *mockNutritionRepo) GetDailyConsumedWater(_ context.Context, _ uuid.UUID, _ time.Time) (int, error) {
 	return 0, nil
 }
+func (m *mockNutritionRepo) GetOrCreateSnapshot(ctx context.Context, snapshot *domain.DailyHealthSnapshot) (*domain.DailyHealthSnapshot, error) {
+	return snapshot, nil
+}
+func (m *mockNutritionRepo) GetFirstSnapshotDate(ctx context.Context, userID uuid.UUID) (time.Time, error) {
+	return time.Time{}, nil
+}
+func (m *mockNutritionRepo) GetSnapshotRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]domain.DailyHealthSnapshot, error) {
+	return nil, nil
+}
+func (m *mockNutritionRepo) GetConsumedRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]domain.DailyCalorieAggregate, error) {
+	return nil, nil
+}
+func (m *mockNutritionRepo) GetBurnedRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]domain.DailyCalorieAggregate, error) {
+	return nil, nil
+}
+func (m *mockNutritionRepo) GetWaterRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]domain.DailyWaterAggregate, error) {
+	return nil, nil
+}
 
 type mockWorkoutRepo struct{}
 

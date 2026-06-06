@@ -150,6 +150,12 @@ func (r *postgresUserRepository) UpdateProfile(ctx context.Context, id uuid.UUID
 	if req.DOB != nil {
 		updates["dob"] = *req.DOB
 	}
+	if req.BMR != nil {
+		updates["bmr"] = *req.BMR
+	}
+	if req.TDEE != nil {
+		updates["tdee"] = *req.TDEE
+	}
 	return r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", id).Updates(updates).Error
 }
 

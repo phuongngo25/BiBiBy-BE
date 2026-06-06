@@ -19,10 +19,11 @@ type User struct {
 	WeightKg          float64   `json:"weight_kg"`
 	DOB               *time.Time `json:"dob"                gorm:"type:date"`
 	Gender            string    `json:"gender"`
-	ActivityLevel     string    `json:"activity_level"`
+	ActivityLevel     ActivityLevel `json:"activity_level"`
 	BMR               float64   `json:"bmr"`
 	TDEE              float64   `json:"tdee"`
-	GoalType          string    `json:"goal_type"`
+	GoalType          GoalType    `json:"goal_type"`
+	Timezone          string    `json:"timezone"           gorm:"default:'UTC'"`
 	WeeklyCalorieBudget float64 `json:"weekly_calorie_budget"`
 	DietaryPreference string    `json:"dietary_preference"`
 	Allergies           string    `json:"allergies"           gorm:"type:text"`
@@ -94,6 +95,8 @@ type UpdateProfileRequest struct {
 	DietaryPreference string     `json:"dietary_preference"`
 	Allergies         string     `json:"allergies"`
 	MedicalConditions string     `json:"medical_conditions"`
+	BMR               *float64   `json:"-"`
+	TDEE              *float64   `json:"-"`
 }
 
 // UserRepository defines the data access boundary for the User entity.

@@ -58,7 +58,7 @@ func (MealLog) TableName() string {
 // LogMealRequest is the input payload for tracking a food consumption event.
 type LogMealRequest struct {
 	FoodID        uuid.UUID `json:"food_id"        binding:"required"`
-	QuantityGrams float64   `json:"quantity_grams" binding:"required,gt=0"`
+	QuantityGrams float64   `json:"quantity_grams" binding:"required,gt=0,lte=5000"`
 	MealType      string    `json:"meal_type"      binding:"required"`
 	ConsumedDate  string    `json:"consumed_date"  binding:"required"`
 }
@@ -88,16 +88,56 @@ type DailyPlanResponse struct {
 	RecommendedFoods []Food    `json:"recommended_foods"`
 }
 
-// DailyAnalytics holds aggregated nutrition data for a single calendar day.
-type DailyAnalytics struct {
-	Date     string  `json:"date"`     // YYYY-MM-DD
-	Consumed float64 `json:"consumed"` // total kcal from meal_logs
-	Burned   float64 `json:"burned"`   // total kcal from workout_logs
+// DailyCalorieAggregate holds total calories consumed or burned grouped by day.
+type DailyCalorieAggregate struct {
+	Day   time.Time
+	Total int
+}
+
+// DailyWaterAggregate holds total water consumed grouped by day.
+type DailyWaterAggregate struct {
+	Day   time.Time
+	Total int
+}
+
+// DayAnalytics represents the unified daily health status.
+type DayAnalytics struct {
+	Date               string `json:"date"`                 // YYYY-MM-DD
+	ConsumedCalories   int    `json:"consumed_calories"`    // Rounded integer
+	TargetCalories     int    `json:"target_calories"`      // Frozen target
+	ConsumedWater      int    `json:"consumed_water"`       // ml
+	TargetWater        int    `json:"target_water"`         // ml
+	EstimatedDailyBurn int    `json:"estimated_daily_burn"` // Frozen base TDEE
+	WorkoutBurned      int    `json:"workout_burned"`       // Workout calories burned
+	TotalBurned        int    `json:"total_burned"`         // EstimatedDailyBurn + WorkoutBurned
+	CalorieGoalHit     bool   `json:"calorie_goal_hit"`
+	WaterGoalHit       bool   `json:"water_goal_hit"`
+	GoalHit            bool   `json:"goal_hit"`             // CalorieGoalHit && WaterGoalHit
 }
 
 // WeeklyAnalyticsResponse is the payload for GET /nutrition/analytics/weekly.
 type WeeklyAnalyticsResponse struct {
-	Days []DailyAnalytics `json:"days"`
+	Type                   string         `json:"type"` // "rolling" or "calendar"
+	WindowDays             int            `json:"window_days"`
+	StartDate              string         `json:"start_date"` // YYYY-MM-DD
+	EndDate                string         `json:"end_date"`   // YYYY-MM-DD
+	Days                   []DayAnalytics `json:"days"`
+	WeeklyConsumedCalories int            `json:"weekly_consumed_calories"`
+	WeeklyBurnedCalories   int            `json:"weekly_burned_calories"`
+	WeeklyConsumedWater    int            `json:"weekly_consumed_water"`
+	StreakDays             int            `json:"streak_days"`
+}
+
+// MonthlyAnalyticsResponse is the payload for GET /nutrition/analytics/monthly.
+type MonthlyAnalyticsResponse struct {
+	Days                  []DayAnalytics `json:"days"`
+	TotalConsumedCalories int            `json:"total_consumed_calories"`
+	TotalConsumedWater    int            `json:"total_consumed_water"`
+	GoalHitDays           int            `json:"goal_hit_days"`
+	WaterGoalHitDays      int            `json:"water_goal_hit_days"`
+	CalorieGoalHitDays    int            `json:"calorie_goal_hit_days"`
+	LongestGoalHitRun     int            `json:"longest_goal_hit_run"` // Max consecutive hits within range
+	CurrentGoalHitRun     int            `json:"current_goal_hit_run"` // Active consecutive streak ending at the range end date (deterministic, not relative to today)
 }
 
 // NutritionRepository defines the data access boundary.
@@ -122,6 +162,16 @@ type NutritionRepository interface {
 	// Hydration Methods
 	LogWater(ctx context.Context, log *WaterLog) error
 	GetDailyConsumedWater(ctx context.Context, userID uuid.UUID, date time.Time) (int, error)
+
+	// Snapshot Methods
+	GetOrCreateSnapshot(ctx context.Context, snapshot *DailyHealthSnapshot) (*DailyHealthSnapshot, error)
+	GetFirstSnapshotDate(ctx context.Context, userID uuid.UUID) (time.Time, error)
+
+	// Range/Batch Analytics Methods (Raw data queries only)
+	GetSnapshotRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]DailyHealthSnapshot, error)
+	GetConsumedRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]DailyCalorieAggregate, error)
+	GetBurnedRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]DailyCalorieAggregate, error)
+	GetWaterRange(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]DailyWaterAggregate, error)
 }
 
 // NutritionUseCase defines the core business logic boundary for nutrition operations.
@@ -133,7 +183,11 @@ type NutritionUseCase interface {
 	CreateFood(ctx context.Context, req *CreateFoodRequest) (*Food, error)
 	LogMeal(ctx context.Context, userID uuid.UUID, req *LogMealRequest) (*MealLog, error)
 	GetDailyPlan(ctx context.Context, userID uuid.UUID, dateStr string) (*DailyPlanResponse, error)
-	GetWeeklyAnalytics(ctx context.Context, userID uuid.UUID) (*WeeklyAnalyticsResponse, error)
+	GetDayAnalytics(ctx context.Context, userID uuid.UUID, dateStr string) (*DayAnalytics, error)
+	GetWeeklyAnalytics(ctx context.Context, userID uuid.UUID, days int, isCalendar bool) (*WeeklyAnalyticsResponse, error)
+	GetMonthlyAnalytics(ctx context.Context, userID uuid.UUID, monthStr string) (*MonthlyAnalyticsResponse, error)
+	EstimateNutrition(ctx context.Context, imageBytes []byte) (*FoodEstimateResponse, error)
+	GetStreak(ctx context.Context, userID uuid.UUID) (*UserStreak, error)
 	UpdateFoodLog(ctx context.Context, userID, logID uuid.UUID, quantity float64) (*MealLog, error)
 	GetJobStatus(ctx context.Context, jobID string) (*JobStatusResponse, error)
 	
@@ -149,4 +203,21 @@ type JobStatusResponse struct {
 	Done      bool
 	Error     string
 	UpdatedAt time.Time
+}
+
+// FoodEstimateResponse is the DTO for AI food estimation preview.
+type FoodEstimateResponse struct {
+	FoodID          uuid.UUID `json:"food_id"`
+	FoodLabel       string    `json:"food_label"`
+	Name            string    `json:"name"`
+	Calories        float64   `json:"calories"`
+	Protein         float64   `json:"protein"`
+	Fat             float64   `json:"fat"`
+	Carbs           float64   `json:"carbs"`
+	CaloriesPer100g float64   `json:"calories_per_100g"`
+	ProteinPer100g  float64   `json:"protein_per_100g"`
+	FatPer100g      float64   `json:"fat_per_100g"`
+	CarbsPer100g    float64   `json:"carbs_per_100g"`
+	QuantityGrams   float64   `json:"quantity_grams"`
+	Confidence      float64   `json:"confidence"`
 }

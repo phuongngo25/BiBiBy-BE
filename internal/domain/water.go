@@ -42,13 +42,13 @@ func CalculateDailyWaterTarget(user User) int {
 
 	// Activity modifiers
 	switch user.ActivityLevel {
-	case "sedentary":
+	case ActivitySedentary:
 		base += 0
-	case "lightly_active":
+	case ActivityLowActive:
 		base += 350
-	case "moderately_active":
+	case ActivityActive:
 		base += 700
-	case "very_active":
+	case ActivityVeryActive:
 		base += 1000
 	}
 

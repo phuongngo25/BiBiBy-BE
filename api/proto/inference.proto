@@ -32,9 +32,33 @@ message EstimateVolumeResponse {
   // Estimated food volume in cubic centimeters (cm³).
   float volume_cm3 = 2;
 
-  // Model confidence score [0.0, 1.0].
-  float confidence = 3;
+  // Model confidence score for the volume estimation [0.0, 1.0].
+  float volume_confidence = 3;
 
   // Total server-side latency for this request in milliseconds.
   float latency_ms = 4;
+
+  // Food classification label (e.g., "pho", "com_tam").
+  string food_label = 5;
+
+  // Classifier confidence score [0.0, 1.0].
+  float food_label_confidence = 6;
+
+  // Estimated food mass in grams (g) = volume * density.
+  float mass_g = 7;
+
+  // Density used for mass calculation (g/cm³).
+  float density_g_cm3 = 8;
+
+  // Explicit flags for presence (replaces 'optional' for cross-lang stability).
+  bool has_mass = 9;
+  bool has_density = 10;
+
+  // Tracking where the density came from (e.g. "manual_registry", "unknown_food").
+  string density_source = 11;
+
+  // Component versions for observability and debugging.
+  string classifier_version = 12;
+  string volume_version = 13;
+  string density_version = 14;
 }

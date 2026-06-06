@@ -73,12 +73,29 @@ type EstimateVolumeResponse struct {
 	RequestId string `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// Estimated food volume in cubic centimeters (cm³).
 	VolumeCm3 float32 `protobuf:"fixed32,2,opt,name=volume_cm3,json=volumeCm3,proto3" json:"volume_cm3,omitempty"`
-	// Model confidence score [0.0, 1.0].
-	Confidence float32 `protobuf:"fixed32,3,opt,name=confidence,proto3" json:"confidence,omitempty"`
+	// Model confidence score for the volume estimation [0.0, 1.0].
+	VolumeConfidence float32 `protobuf:"fixed32,3,opt,name=volume_confidence,json=volumeConfidence,proto3" json:"volume_confidence,omitempty"`
 	// Total server-side latency for this request in milliseconds.
-	LatencyMs     float32 `protobuf:"fixed32,4,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	LatencyMs float32 `protobuf:"fixed32,4,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
+	// Food classification label (e.g., "pho", "com_tam").
+	FoodLabel string `protobuf:"bytes,5,opt,name=food_label,json=foodLabel,proto3" json:"food_label,omitempty"`
+	// Classifier confidence score [0.0, 1.0].
+	FoodLabelConfidence float32 `protobuf:"fixed32,6,opt,name=food_label_confidence,json=foodLabelConfidence,proto3" json:"food_label_confidence,omitempty"`
+	// Estimated food mass in grams (g) = volume * density.
+	MassG float32 `protobuf:"fixed32,7,opt,name=mass_g,json=massG,proto3" json:"mass_g,omitempty"`
+	// Density used for mass calculation (g/cm³).
+	DensityGCm3 float32 `protobuf:"fixed32,8,opt,name=density_g_cm3,json=densityGCm3,proto3" json:"density_g_cm3,omitempty"`
+	// Explicit flags for presence (replaces 'optional' for cross-lang stability).
+	HasMass    bool `protobuf:"varint,9,opt,name=has_mass,json=hasMass,proto3" json:"has_mass,omitempty"`
+	HasDensity bool `protobuf:"varint,10,opt,name=has_density,json=hasDensity,proto3" json:"has_density,omitempty"`
+	// Tracking where the density came from (e.g. "manual_registry", "unknown_food").
+	DensitySource string `protobuf:"bytes,11,opt,name=density_source,json=densitySource,proto3" json:"density_source,omitempty"`
+	// Component versions for observability and debugging.
+	ClassifierVersion string `protobuf:"bytes,12,opt,name=classifier_version,json=classifierVersion,proto3" json:"classifier_version,omitempty"`
+	VolumeVersion     string `protobuf:"bytes,13,opt,name=volume_version,json=volumeVersion,proto3" json:"volume_version,omitempty"`
+	DensityVersion    string `protobuf:"bytes,14,opt,name=density_version,json=densityVersion,proto3" json:"density_version,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *EstimateVolumeResponse) Reset() {
@@ -125,9 +142,9 @@ func (x *EstimateVolumeResponse) GetVolumeCm3() float32 {
 	return 0
 }
 
-func (x *EstimateVolumeResponse) GetConfidence() float32 {
+func (x *EstimateVolumeResponse) GetVolumeConfidence() float32 {
 	if x != nil {
-		return x.Confidence
+		return x.VolumeConfidence
 	}
 	return 0
 }
@@ -139,6 +156,76 @@ func (x *EstimateVolumeResponse) GetLatencyMs() float32 {
 	return 0
 }
 
+func (x *EstimateVolumeResponse) GetFoodLabel() string {
+	if x != nil {
+		return x.FoodLabel
+	}
+	return ""
+}
+
+func (x *EstimateVolumeResponse) GetFoodLabelConfidence() float32 {
+	if x != nil {
+		return x.FoodLabelConfidence
+	}
+	return 0
+}
+
+func (x *EstimateVolumeResponse) GetMassG() float32 {
+	if x != nil {
+		return x.MassG
+	}
+	return 0
+}
+
+func (x *EstimateVolumeResponse) GetDensityGCm3() float32 {
+	if x != nil {
+		return x.DensityGCm3
+	}
+	return 0
+}
+
+func (x *EstimateVolumeResponse) GetHasMass() bool {
+	if x != nil {
+		return x.HasMass
+	}
+	return false
+}
+
+func (x *EstimateVolumeResponse) GetHasDensity() bool {
+	if x != nil {
+		return x.HasDensity
+	}
+	return false
+}
+
+func (x *EstimateVolumeResponse) GetDensitySource() string {
+	if x != nil {
+		return x.DensitySource
+	}
+	return ""
+}
+
+func (x *EstimateVolumeResponse) GetClassifierVersion() string {
+	if x != nil {
+		return x.ClassifierVersion
+	}
+	return ""
+}
+
+func (x *EstimateVolumeResponse) GetVolumeVersion() string {
+	if x != nil {
+		return x.VolumeVersion
+	}
+	return ""
+}
+
+func (x *EstimateVolumeResponse) GetDensityVersion() string {
+	if x != nil {
+		return x.DensityVersion
+	}
+	return ""
+}
+
 var File_inference_proto protoreflect.FileDescriptor
 
 const file_inference_proto_rawDesc = "" +
@@ -146,17 +233,28 @@ const file_inference_proto_rawDesc = "" +
 	"\x0finference.proto\x12\x10nutrix.inference\"6\n" +
 	"\x15EstimateVolumeRequest\x12\x1d\n" +
 	"\n" +
-	"image_data\x18\x01 \x01(\fR\timageData\"\x95\x01\n" +
+	"image_data\x18\x01 \x01(\fR\timageData\"\x92\x04\n" +
 	"\x16EstimateVolumeResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1d\n" +
 	"\n" +
-	"volume_cm3\x18\x02 \x01(\x02R\tvolumeCm3\x12\x1e\n" +
+	"volume_cm3\x18\x02 \x01(\x02R\tvolumeCm3\x12+\n" +
+	"\x11volume_confidence\x18\x03 \x01(\x02R\x10volumeConfidence\x12\x1d\n" +
 	"\n" +
-	"confidence\x18\x03 \x01(\x02R\n" +
-	"confidence\x12\x1d\n" +
+	"latency_ms\x18\x04 \x01(\x02R\tlatencyMs\x12\x1d\n" +
 	"\n" +
-	"latency_ms\x18\x04 \x01(\x02R\tlatencyMs2w\n" +
+	"food_label\x18\x05 \x01(\tR\tfoodLabel\x122\n" +
+	"\x15food_label_confidence\x18\x06 \x01(\x02R\x13foodLabelConfidence\x12\x15\n" +
+	"\x06mass_g\x18\a \x01(\x02R\x05massG\x12\"\n" +
+	"\rdensity_g_cm3\x18\b \x01(\x02R\vdensityGCm3\x12\x19\n" +
+	"\bhas_mass\x18\t \x01(\bR\ahasMass\x12\x1f\n" +
+	"\vhas_density\x18\n" +
+	" \x01(\bR\n" +
+	"hasDensity\x12%\n" +
+	"\x0edensity_source\x18\v \x01(\tR\rdensitySource\x12-\n" +
+	"\x12classifier_version\x18\f \x01(\tR\x11classifierVersion\x12%\n" +
+	"\x0evolume_version\x18\r \x01(\tR\rvolumeVersion\x12'\n" +
+	"\x0fdensity_version\x18\x0e \x01(\tR\x0edensityVersion2w\n" +
 	"\x10InferenceService\x12c\n" +
 	"\x0eEstimateVolume\x12'.nutrix.inference.EstimateVolumeRequest\x1a(.nutrix.inference.EstimateVolumeResponseB!Z\x1fnutrix/inference/v1;inferencev1b\x06proto3"
 

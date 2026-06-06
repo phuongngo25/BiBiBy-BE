@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NutriX KG - First Technical Design Document (TDD)</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>mermaid.initialize({startOnLoad:true, theme: 'neutral'});</script>
+    
+    <style>
+        :root {
+            --primary: #0f172a;
+            --secondary: #334155;
+            --accent: #2563eb;
+            --success: #16a34a;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --text: #334155;
+            --border: #e2e8f0;
+            --code-bg: #1e293b;
+            --code-text: #e2e8f0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text);
+            background: var(--bg);
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .container {
+            background: var(--surface);
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+
+        h1 { color: var(--primary); border-bottom: 4px solid var(--accent); padding-bottom: 10px; font-size: 2.5em; }
+        h2 { color: var(--secondary); border-bottom: 2px solid var(--border); padding-bottom: 8px; margin-top: 1.5em; }
+        h3 { color: var(--accent); margin-top: 1.2em; }
+        
+        pre { background: var(--code-bg); color: var(--code-text); padding: 16px; border-radius: 8px; overflow-x: auto; font-family: 'Fira Code', Consolas, monospace; font-size: 14px; }
+        code { background: #e2e8f0; color: #b91c1c; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+        pre code { background: none; color: inherit; padding: 0; }
+
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid var(--border); padding: 12px; text-align: left; }
+        th { background: var(--primary); color: white; }
+
+        .diagram-container { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 20px 0; display: flex; justify-content: center; overflow-x: auto; }
+        
+        .badge { padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; color: white; }
+        .badge.frozen { background-color: var(--success); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NutriX KG - Technical Design Document (V1)</h1>
+        <p><span class="badge frozen">ARCHITECTURE FROZEN</span> <strong>Target:</strong> Implementation Guide for AI & Dev Team</p>
+
+        <h2>1. Refined Folder Structure (Production Grade)</h2>
+        <pre><code>nutrix_kg_service/
+├── core/
+│   ├── domain/
+│   │   ├── models/            # Entities: CanonicalFood, ConstraintRule, NutritionBudget
+│   │   ├── dsl/               # (NEW) Constraint DSL Parser & AST
+│   │   ├── ontology/          # (NEW) Hierarchy Rules (DAG validation, Cycle prevention)
+│   │   └── context/           # UserNutritionContext, RuleVersion
+│   ├── application/
+│   │   ├── enrichment/        # MergeStrategies, CanonicalizationService, ReviewWorkflow
+│   │   ├── constraint/        # Evaluators, ConflictResolver, BudgetEngine
+│   │   ├── projection/        # (NEW) Sync handlers (Postgres -> Neo4j)
+│   │   └── recommendation/    # ScoringPipeline, WarningPenalty
+│   └── infrastructure/
+│       ├── persistence/       # PostgresRepo, Neo4jRepo
+│       ├── external/          # USDAClient, GeminiClient
+│       └── messaging/         # (NEW) Event bus/Kafka handlers for Sync
+├── api/                       # FastAPI/gRPC endpoints, CV Contracts
+└── tests/                     # Unit, Integration, E2E, Ontology Tests
+</code></pre>
+
+        <h2>2. Constraint DSL (Domain Specific Language)</h2>
+        <p>Chuẩn hóa tuyệt đối ngôn ngữ cấu hình Rule để PostgreSQL, Neo4j và Python Engine hiểu chung một ngữ nghĩa.</p>
+        <pre><code class="language-json">{
+  "rule_id": "HTN_SODIUM_LIMIT_V2",
+  "rule_type": "LIMIT",      // Enum: LIMIT, EXCLUDE, REQUIRE, RECOMMEND
+  "target_type": "NUTRIENT", // Enum: FOOD, INGREDIENT, CATEGORY, NUTRIENT
+  "target_key": "N_SODIUM",
+  "operator": "<=",          // Enum: <=, >=, ==, !=
+  "value_expression": {
+    "type": "STATIC",        // Enum: STATIC, FORMULA
+    "value": 1500,
+    "unit": "mg"
+  }
+}</code></pre>
+
+        <h2>3. Category Hierarchy & Ontology Rules</h2>
+        <p>Định nghĩa cấu trúc phả hệ phân loại (DAG - Directed Acyclic Graph).</p>
+        <ul>
+            <li><strong>Multiple Parents:</strong> Cho phép (VD: <code>Tomato</code> thuộc <code>Fruit</code> VÀ <code>Vegetable</code>).</li>
+            <li><strong>Max Depth:</strong> 5 levels (để tối ưu performance khi query Cypher <code>-[:BELONGS_TO*1..5]-></code>).</li>
+            <li><strong>Cycle Prevention:</strong> Bắt buộc validate thuật toán Topo-sort tại tầng Application trước khi Insert vào Neo4j.</li>
+        </ul>
+
+        <h2>4. Canonicalization & Merge Strategy</h2>
+        <p>Cơ chế chống rác và trùng lặp dữ liệu (De-duplication) từ nhiều nguồn.</p>
+        <div class="diagram-container">
+            <div class="mermaid">
+                erDiagram
+                    CANONICAL_FOOD ||--o{ ALIAS : "has_alias"
+                    CANONICAL_FOOD ||--o{ ENRICHMENT_SOURCE : "merged_from"
+                    
+                    CANONICAL_FOOD {
+                        uuid food_id PK
+                        string canonical_name "e.g., Pho Bo"
+                    }
+                    ALIAS {
+                        string name "Phở Bò, Beef Pho, Noodle Soup"
+                    }
+            </div>
+        </div>
+        <p><strong>Merge Strategy (Conflict Resolution):</strong> Áp dụng Weighted Confidence. Nếu có xung đột về Serving Size: <code>USDA (1.0) &gt; Manual (0.9) &gt; LLM (0.7) &gt; CV (0.5)</code>.</p>
+
+        <h2>5. Projection Sync Architecture (Event-Driven)</h2>
+        <p>Đồng bộ dữ liệu từ Source of Truth (Postgres) sang Read Model (Neo4j).</p>
+        <div class="diagram-container">
+            <div class="mermaid">
+                sequenceDiagram
+                    participant Admin
+                    participant API as KG API (Postgres)
+                    participant EventBus as Message Broker
+                    participant Worker as Projection Worker (Neo4j)
+
+                    Admin->>API: Approve Draft Food
+                    API->>API: Update Postgres state = VERIFIED
+                    API->>EventBus: Publish [FoodVerifiedEvent]
+                    EventBus->>Worker: Consume Event
+                    Worker->>Worker: Build Cypher Query
+                    Worker->>Worker: Cypher Merge (Idempotent)
+                    Worker-->>EventBus: Ack Message
+            </div>
+        </div>
+
+        <h2>6. Versioning, Audit Trail & Explanation</h2>
+        <p>Phục vụ truy vết y khoa. Bất kỳ kết quả đánh giá nào cũng phải đính kèm Version của Guideline.</p>
+        <pre><code class="language-json">{
+  "status": "CRITICAL",
+  "reason": "Vượt giới hạn Natri khuyên dùng",
+  "audit": {
+    "rule_id": "HTN_SODIUM_LIMIT",
+    "rule_version": "v2.1",
+    "source_guideline": "AHA Guideline 2025",
+    "evaluated_at": "2026-06-02T12:00:00Z"
+  }
+}</code></pre>
+
+        <h2>7. Computer Vision (CV) Integration Contract</h2>
+        <p>Interface chuẩn bị sẵn cho team ML/AI nhận diện hình ảnh.</p>
+        <pre><code class="language-json">// POST /api/v1/kg/enrich/cv
+{
+  "image_id": "img_998",
+  "detected_items": [
+    {
+      "label": "Pho Bo",
+      "confidence": 0.92,
+      "bounding_box": [10, 20, 150, 200]
+    }
+  ]
+}</code></pre>
+
+        <h2>8. Human Review Workflow (State Machine)</h2>
+        <p>Xử lý quyết định của Admin/Medical Expert với các món ăn do LLM/CV sinh ra (Score 0.5 - 0.8).</p>
+        <ul>
+            <li><code>APPROVE</code>: Đổi state thành VERIFIED, push event sync Neo4j.</li>
+            <li><code>REJECT</code>: Đổi state thành REJECTED (giữ lại trong DB để làm negative label train ML sau này).</li>
+            <li><code>APPROVE_WITH_EDIT</code>: Tạo version mới, override dữ liệu của LLM, set source = MANUAL (Confidence = 0.9), push event sync.</li>
+        </ul>
+
+        <h2>9. Testing Strategy (Pyramid)</h2>
+        <p>Do tính phức tạp của Knowledge Graph, chiến lược test được chia làm 4 lớp:</p>
+        <ul>
+            <li><strong>Lớp 1 - Unit Tests (Core Domain):</strong> Test DSL Parser, Formula Engine, Unit Converter (đảm bảo 1g = 1000mg). <em>Không mock DB.</em></li>
+            <li><strong>Lớp 2 - Integration Tests (Persistence):</strong> Test Projection Sync Worker đảm bảo Idempotent (chạy Cypher 2 lần không sinh node trùng).</li>
+            <li><strong>Lớp 3 - Ontology Tests (Graph):</strong> Viết test phát hiện Cycle (Vòng lặp) trong Category Hierarchy.</li>
+            <li><strong>Lớp 4 - E2E Tests (Constraint):</strong> Giả lập Use Case: "User có Seafood Allergy + Món ăn chứa Shrimp &rarr; API phải trả CRITICAL".</li>
+        </ul>
+    </div>
+</body>
+</html>

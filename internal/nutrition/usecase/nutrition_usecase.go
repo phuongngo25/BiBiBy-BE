@@ -4,25 +4,63 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"nutrix-backend/internal/domain"
+	"nutrix-backend/internal/nutrition/service"
 	"nutrix-backend/pkg/spoonacular"
 )
 
 type nutritionUseCase struct {
-	repo        domain.NutritionRepository
-	spoonClient *spoonacular.Client
-	workoutRepo domain.WorkoutRepository
-	userRepo    domain.UserRepository
+	repo                domain.NutritionRepository
+	streakRepo          domain.StreakRepository
+	achievementRepo      domain.AchievementRepository
+	spoonClient         *spoonacular.Client
+	workoutRepo         domain.WorkoutRepository
+	userRepo            domain.UserRepository
+	analyticsService    service.AnalyticsAggregationService
+	streakService       service.StreakEvaluationService
+	gamificationService service.GamificationService
+	aiPort              domain.InferencePort
 }
 
-// NewNutritionUseCase creates the usecase wired with the nutrition repository, Spoonacular client, workout repository and user repository.
-func NewNutritionUseCase(repo domain.NutritionRepository, spoonClient *spoonacular.Client, workoutRepo domain.WorkoutRepository, userRepo domain.UserRepository) domain.NutritionUseCase {
-	return &nutritionUseCase{repo: repo, spoonClient: spoonClient, workoutRepo: workoutRepo, userRepo: userRepo}
+// NewNutritionUseCase creates the usecase wired with the nutrition repository, streak repository, Spoonacular client, workout repository and user repository.
+func NewNutritionUseCase(
+	repo domain.NutritionRepository,
+	streakRepo domain.StreakRepository,
+	achievementRepo domain.AchievementRepository,
+	spoonClient *spoonacular.Client,
+	workoutRepo domain.WorkoutRepository,
+	userRepo domain.UserRepository,
+	aiPort domain.InferencePort,
+) domain.NutritionUseCase {
+	analyticsSvc := service.NewAnalyticsAggregationService(repo, userRepo)
+	var streakSvc service.StreakEvaluationService
+	if streakRepo != nil {
+		streakSvc = service.NewStreakEvaluationService(repo, streakRepo, userRepo, analyticsSvc)
+	}
+
+	var gamificationSvc service.GamificationService
+	if achievementRepo != nil && streakRepo != nil {
+		gamificationSvc = service.NewGamificationService(achievementRepo, streakRepo, analyticsSvc, userRepo)
+	}
+
+	return &nutritionUseCase{
+		repo:                repo,
+		streakRepo:          streakRepo,
+		achievementRepo:      achievementRepo,
+		spoonClient:         spoonClient,
+		workoutRepo:         workoutRepo,
+		userRepo:            userRepo,
+		analyticsService:    analyticsSvc,
+		streakService:       streakSvc,
+		gamificationService: gamificationSvc,
+		aiPort:              aiPort,
+	}
 }
 
 // SearchFoods is the "Local First, API Second" entrypoint (GET /nutrition/foods/search?q=).
@@ -193,6 +231,7 @@ func (u *nutritionUseCase) LogMeal(ctx context.Context, userID uuid.UUID, req *d
 	}
 
 	mealLog.Food = *food
+	u.evaluateStreakHook(ctx, userID, date)
 	return mealLog, nil
 }
 
@@ -226,10 +265,45 @@ func (u *nutritionUseCase) GetDailyPlan(ctx context.Context, userID uuid.UUID, d
 	targetWater := 2000
 	userProfile, err := u.userRepo.GetByID(ctx, userID)
 	if err == nil && userProfile != nil {
-		if userProfile.TDEE > 0 {
-			targetCalories = userProfile.TDEE
+		// Resolve snapshot date at midnight UTC (DATE column mapping)
+		snapshotDate := time.Date(requestedDate.Year(), requestedDate.Month(), requestedDate.Day(), 0, 0, 0, 0, time.UTC)
+
+		calcService := service.NewHealthCalculationService()
+		bmr := int(math.Round(userProfile.BMR))
+		if bmr <= 0 && userProfile.WeightKg > 0 && userProfile.HeightCm > 0 && userProfile.DOB != nil {
+			bmr = calcService.CalculateBMR(userProfile.WeightKg, userProfile.HeightCm, *userProfile.DOB, userProfile.Gender)
 		}
-		targetWater = domain.CalculateDailyWaterTarget(*userProfile)
+		tdee := int(math.Round(userProfile.TDEE))
+		if tdee <= 0 && bmr > 0 {
+			tdee = calcService.CalculateTDEE(bmr, userProfile.ActivityLevel)
+		}
+
+		strategy := service.NewGoalStrategyV1()
+		targetCal, targetWat := strategy.CalculateTargets(userProfile)
+
+		draft := &domain.DailyHealthSnapshot{
+			UserID:              userID,
+			SnapshotDate:        snapshotDate,
+			WeightKg:            userProfile.WeightKg,
+			ActivityLevel:       userProfile.ActivityLevel,
+			GoalType:            userProfile.GoalType,
+			BMR:                 bmr,
+			TDEE:                tdee,
+			TargetCalories:      targetCal,
+			TargetWater:         targetWat,
+			GoalStrategyVersion: "v1",
+		}
+
+		snapshot, snapErr := u.repo.GetOrCreateSnapshot(ctx, draft)
+		if snapErr == nil && snapshot != nil {
+			targetCalories = float64(snapshot.TargetCalories)
+			targetWater = snapshot.TargetWater
+			u.evaluateStreakHook(ctx, userID, snapshotDate)
+		} else {
+			// Fallback in case snapshot creation fails
+			targetCalories = float64(targetCal)
+			targetWater = targetWat
+		}
 	}
 
 	consumedWater := 0
@@ -250,61 +324,163 @@ func (u *nutritionUseCase) GetDailyPlan(ctx context.Context, userID uuid.UUID, d
 }
 
 
-// GetWeeklyAnalytics returns exactly 7 DailyAnalytics entries for the last 7
-// days (6 days ago → today). Days with no data are filled with zeros.
-func (u *nutritionUseCase) GetWeeklyAnalytics(ctx context.Context, userID uuid.UUID) (*domain.WeeklyAnalyticsResponse, error) {
-	const numDays = 7
-
-	// Fetch both maps concurrently for minimal latency
-	type result struct {
-		data map[string]float64
-		err  error
-	}
-	cCh := make(chan result, 1)
-	bCh := make(chan result, 1)
-
-	go func() {
-		d, err := u.repo.GetWeeklyConsumed(ctx, userID, numDays)
-		cCh <- result{d, err}
-	}()
-	go func() {
-		d, err := u.repo.GetWeeklyBurned(ctx, userID, numDays)
-		bCh <- result{d, err}
-	}()
-
-	cRes := <-cCh
-	bRes := <-bCh
-
-	if cRes.err != nil {
-		return nil, cRes.err
-	}
-	if bRes.err != nil {
-		return nil, bRes.err
+// GetDayAnalytics returns analytics for a single calendar day.
+func (u *nutritionUseCase) GetDayAnalytics(ctx context.Context, userID uuid.UUID, dateStr string) (*domain.DayAnalytics, error) {
+	requestedDate, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid date format: %w", err)
 	}
 
-	consumed := cRes.data
-	if consumed == nil {
-		consumed = map[string]float64{}
+	days, err := u.analyticsService.BuildAnalyticsRange(ctx, userID, requestedDate, requestedDate)
+	if err != nil {
+		return nil, err
 	}
-	burned := bRes.data
-	if burned == nil {
-		burned = map[string]float64{}
+	if len(days) == 0 {
+		return nil, fmt.Errorf("could not retrieve analytics for date")
 	}
 
-	// Build the exactly-7-entry slice from 6 days ago → today
-	days := make([]domain.DailyAnalytics, numDays)
-	today := time.Now()
-	for i := 0; i < numDays; i++ {
-		d := today.AddDate(0, 0, -(numDays-1-i))
-		key := d.Format("2006-01-02")
-		days[i] = domain.DailyAnalytics{
-			Date:     key,
-			Consumed: consumed[key], // 0 if absent
-			Burned:   burned[key],   // 0 if absent
+	return &days[0], nil
+}
+
+// GetWeeklyAnalytics returns week-over-week nutritional tracking, configurable totals, and metadata.
+func (u *nutritionUseCase) GetWeeklyAnalytics(ctx context.Context, userID uuid.UUID, daysCount int, isCalendar bool) (*domain.WeeklyAnalyticsResponse, error) {
+	if daysCount <= 0 {
+		daysCount = 7
+	}
+
+	var start, end time.Time
+	
+	// Resolve timezone from user profile if available, to make rolling/calendar window calculations timezone-safe.
+	loc := time.UTC
+	userProfile, err := u.userRepo.GetByID(ctx, userID)
+	if err == nil && userProfile != nil && userProfile.Timezone != "" {
+		if l, errLoc := time.LoadLocation(userProfile.Timezone); errLoc == nil {
+			loc = l
+		}
+	}
+	today := time.Now().In(loc)
+
+	if isCalendar {
+		// Calculate current calendar week (Monday to Sunday) relative to UTC midnights
+		weekday := int(today.Weekday())
+		if weekday == 0 {
+			weekday = 7 // Sunday is 7th day
+		}
+		start = today.AddDate(0, 0, -(weekday - 1))
+		end = start.AddDate(0, 0, 6)
+	} else {
+		// Rolling days (default: 6 days ago -> today)
+		end = today
+		start = today.AddDate(0, 0, -(daysCount - 1))
+	}
+
+	days, err := u.analyticsService.BuildAnalyticsRange(ctx, userID, start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	var totalConsumed, totalBurned, totalWater int
+	for _, d := range days {
+		totalConsumed += d.ConsumedCalories
+		totalBurned += d.WorkoutBurned
+		totalWater += d.ConsumedWater
+	}
+
+	// Calculate active streak within the week range (scanned backwards from the end of the range)
+	streak := 0
+	for i := len(days) - 1; i >= 0; i-- {
+		if days[i].GoalHit {
+			streak++
+		} else {
+			break
 		}
 	}
 
-	return &domain.WeeklyAnalyticsResponse{Days: days}, nil
+	weeklyType := "rolling"
+	if isCalendar {
+		weeklyType = "calendar"
+	}
+
+	return &domain.WeeklyAnalyticsResponse{
+		Type:                   weeklyType,
+		WindowDays:             len(days),
+		StartDate:              start.Format("2006-01-02"),
+		EndDate:                end.Format("2006-01-02"),
+		Days:                   days,
+		WeeklyConsumedCalories: totalConsumed,
+		WeeklyBurnedCalories:   totalBurned,
+		WeeklyConsumedWater:    totalWater,
+		StreakDays:             streak,
+	}, nil
+}
+
+// GetMonthlyAnalytics aggregates daily records and calculates streaks deterministically relative to the month's end.
+func (u *nutritionUseCase) GetMonthlyAnalytics(ctx context.Context, userID uuid.UUID, monthStr string) (*domain.MonthlyAnalyticsResponse, error) {
+	parsed, err := time.Parse("2006-01", monthStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid month format: %w", err)
+	}
+
+	start := time.Date(parsed.Year(), parsed.Month(), 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, -1)
+
+	days, err := u.analyticsService.BuildAnalyticsRange(ctx, userID, start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	var totalConsumed, totalWater int
+	var goalHitDays, waterHitDays, calorieHitDays int
+
+	for _, d := range days {
+		totalConsumed += d.ConsumedCalories
+		totalWater += d.ConsumedWater
+		if d.GoalHit {
+			goalHitDays++
+		}
+		if d.WaterGoalHit {
+			waterHitDays++
+		}
+		if d.CalorieGoalHit {
+			calorieHitDays++
+		}
+	}
+
+	// Compute monthly consecutive runs (Longest vs Current)
+	longestRun := 0
+	currentRun := 0
+	tempRun := 0
+
+	for _, d := range days {
+		if d.GoalHit {
+			tempRun++
+			if tempRun > longestRun {
+				longestRun = tempRun
+			}
+		} else {
+			tempRun = 0
+		}
+	}
+
+	// Calculate current active run ending on the last day of the month (deterministic)
+	for i := len(days) - 1; i >= 0; i-- {
+		if days[i].GoalHit {
+			currentRun++
+		} else {
+			break
+		}
+	}
+
+	return &domain.MonthlyAnalyticsResponse{
+		Days:                  days,
+		TotalConsumedCalories: totalConsumed,
+		TotalConsumedWater:    totalWater,
+		GoalHitDays:           goalHitDays,
+		WaterGoalHitDays:      waterHitDays,
+		CalorieGoalHitDays:    calorieHitDays,
+		LongestGoalHitRun:     longestRun,
+		CurrentGoalHitRun:     currentRun,
+	}, nil
 }
 
 
@@ -404,6 +580,10 @@ func (u *nutritionUseCase) UpdateFoodLog(ctx context.Context, userID, logID uuid
 		return nil, err
 	}
 
+	if updatedLog != nil {
+		u.evaluateStreakHook(ctx, userID, updatedLog.ConsumedDate)
+	}
+
 	return updatedLog, nil
 }
 
@@ -445,10 +625,155 @@ func (u *nutritionUseCase) LogWater(ctx context.Context, userID uuid.UUID, req *
 		return nil, domain.ErrInternalServerError
 	}
 
+	u.evaluateStreakHook(ctx, userID, time.Now())
+
 	return &domain.LogWaterResponse{
 		ID:        log.ID,
 		AmountMl:  log.AmountMl,
 		Source:    log.Source,
 		CreatedAt: log.CreatedAt,
+	}, nil
+}
+
+// GetStreak retrieves the cached streak for the user. If none exists, it lazy-evaluates and caches it on the fly.
+func (u *nutritionUseCase) GetStreak(ctx context.Context, userID uuid.UUID) (*domain.UserStreak, error) {
+	if u.streakRepo == nil {
+		return &domain.UserStreak{UserID: userID}, nil
+	}
+
+	streak, err := u.streakRepo.GetStreak(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cold-start self-healing: lazy evaluate if no cached record exists
+	if streak == nil {
+		if u.streakService != nil {
+			loc := time.UTC
+			userProfile, err := u.userRepo.GetByID(ctx, userID)
+			if err == nil && userProfile != nil && userProfile.Timezone != "" {
+				if l, errLoc := time.LoadLocation(userProfile.Timezone); errLoc == nil {
+					loc = l
+				}
+			}
+			today := time.Now().In(loc)
+			
+			streak, err = u.streakService.EvaluateStreak(ctx, userID, today)
+			if err != nil {
+				log.Printf("[GetStreak] dynamic evaluation failed for user %s: %v", userID, err)
+				return &domain.UserStreak{UserID: userID}, nil
+			}
+		} else {
+			return &domain.UserStreak{UserID: userID}, nil
+		}
+	}
+
+	return streak, nil
+}
+
+// evaluateStreakHook triggers the StreakEvaluationService timezone-safely in a background goroutine.
+// As part of the resilient failure policy, cache failures never rollback log mutations.
+func (u *nutritionUseCase) evaluateStreakHook(ctx context.Context, userID uuid.UUID, date time.Time) {
+	if u.streakService == nil {
+		return
+	}
+	go func() {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		_, err := u.streakService.EvaluateStreak(bgCtx, userID, date)
+		if err != nil {
+			log.Printf("[Streak Hook] WARNING: Streak evaluation failed for user %s on date %v: %v", userID, date, err)
+		} else {
+			log.Printf("[Streak Hook] Success: Streak evaluated for user %s on date %v", userID, date)
+
+			// Trigger achievement evaluation after successful streak update
+			if u.gamificationService != nil {
+				// Evaluate streak-based achievements
+				if err := u.gamificationService.EvaluateAchievements(bgCtx, userID, domain.TriggerStreakUpdated, date); err != nil {
+					log.Printf("[Achievement Hook] WARNING: Streak achievement evaluation failed for user %s: %v", userID, err)
+				}
+				// Evaluate goal-based achievements for this specific date
+				if err := u.gamificationService.EvaluateAchievements(bgCtx, userID, domain.TriggerDailyGoal, date); err != nil {
+					log.Printf("[Achievement Hook] WARNING: Daily goal achievement evaluation failed for user %s on date %v: %v", userID, date, err)
+				}
+			}
+		}
+	}()
+}
+var AIFoodRegistry = map[string]string{
+	"banh_beo": "de9a1cbd-27ed-4cf6-84c4-ac23ae49c7ce",
+	"banh_bot_loc": "8c503823-19d0-4248-9f33-f9320e9c4e7d",
+	"banh_can": "3b607f03-496c-4082-abc1-b1836df08638",
+	"banh_canh": "cbe50f45-9654-4799-ab1f-97ec683477c3",
+	"banh_chung": "09982e82-ce84-440d-9c5c-ba70ed20ae38",
+	"banh_cuon": "017ec832-5da8-4a70-9c71-a78263a88b31",
+	"banh_duc": "3f32e1da-c56a-4236-8c5c-0cb4c9e5e178",
+	"banh_gio": "11f2d505-1cc1-4e03-b7cb-028c88aa36a1",
+	"banh_khot": "73b1f6da-170a-4554-9d13-42046c0e14e8",
+	"banh_mi": "a3b7fdae-f6cd-49e9-82f3-f51ec3a534ce",
+	"banh_pia": "e2c3a6e5-aa49-45c7-8b22-bb0dc6349fa2",
+	"banh_tet": "a5a366be-324c-4b40-98e5-df1a4b7e84fc",
+	"banh_trang_nuong": "a3b78b44-3191-4d47-9bde-c5b3de226982",
+	"banh_xeo": "df43cbf0-2f5b-4f80-b575-0d28f15c3a49",
+	"bun_bo_hue": "d34e809b-c634-41ab-8bf2-7086506be757",
+	"bun_dau_mam_tom": "c61c7e67-dc2d-4f97-a252-a4e04db2f88a",
+	"bun_mam": "64479a47-d57a-4b19-b2e2-6d7bbe00dbf9",
+	"bun_rieu": "5c543961-42b2-43c4-a821-0cdf74d7691c",
+	"bun_thit_nuong": "70625c41-0f01-4544-9ad3-3f2ef8a27881",
+	"ca_kho_to": "e6c966f0-f6d0-4328-8c5f-fd7c6be44741",
+	"canh_chua": "d54d6238-e299-4074-b980-54aa66dcdda0",
+	"cao_lau": "8a178f5e-d889-4ea0-a727-4824c8f9e80d",
+	"chao_long": "7788269d-2955-428a-9d61-efa6181ca44f",
+	"com_tam": "db17b81e-e5e2-4a49-ae75-022b58169c20",
+	"goi_cuon": "4674dd55-c4d0-43b8-ba94-949abee2e5f2",
+	"hu_tieu": "455231e5-daf8-4a66-a9f3-0fcd305113d7",
+	"mi_quang": "d2e673de-ae0e-4546-b390-f6cfdf85d467",
+	"nem_chua": "42fd673e-11b5-4298-9353-85cb7e4ef371",
+	"pho": "525514d7-4261-4d7d-8cd6-6c5bcf28646f",
+	"xoi_xeo": "25163e9b-a507-4e51-ba5d-e66cdfcf35d0",
+}
+
+func (u *nutritionUseCase) EstimateNutrition(ctx context.Context, imageBytes []byte) (*domain.FoodEstimateResponse, error) {
+	result, err := u.aiPort.EstimateVolume(ctx, imageBytes)
+	if err != nil {
+		return nil, fmt.Errorf("could not estimate from image: %w", err)
+	}
+
+	if result.FoodLabel == "unknown" || result.FoodLabel == "" {
+		return nil, fmt.Errorf("ai could not recognize food in image")
+	}
+
+	dishIDStr, exists := AIFoodRegistry[result.FoodLabel]
+	if !exists {
+		return nil, fmt.Errorf("unsupported food label from AI: %s", result.FoodLabel)
+	}
+
+	parsedDishID, err := uuid.Parse(dishIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid dish ID format in registry: %w", err)
+	}
+
+	foodInfo, err := u.repo.GetFoodByID(ctx, parsedDishID)
+	if err != nil {
+		return nil, fmt.Errorf("food item not found in DB: %w", err)
+	}
+
+	massGrams := result.MassG
+	ratio := massGrams / 100.0
+
+	return &domain.FoodEstimateResponse{
+		FoodID:          foodInfo.ID,
+		FoodLabel:       result.FoodLabel,
+		Name:            foodInfo.Name,
+		Calories:        foodInfo.CaloriesPer100g * ratio,
+		Protein:         foodInfo.ProteinPer100g * ratio,
+		Fat:             foodInfo.FatPer100g * ratio,
+		Carbs:           foodInfo.CarbsPer100g * ratio,
+		CaloriesPer100g: foodInfo.CaloriesPer100g,
+		ProteinPer100g:  foodInfo.ProteinPer100g,
+		FatPer100g:      foodInfo.FatPer100g,
+		CarbsPer100g:    foodInfo.CarbsPer100g,
+		QuantityGrams:   massGrams,
+		Confidence:      result.FoodLabelConfidence,
 	}, nil
 }

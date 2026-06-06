@@ -44,7 +44,7 @@ func (g *grpcAIClient) Close() error {
 	return g.conn.Close()
 }
 
-func (g *grpcAIClient) EstimateVolume(ctx context.Context, imageBytes []byte) (float64, error) {
+func (g *grpcAIClient) EstimateVolume(ctx context.Context, imageBytes []byte) (*domain.InferenceResult, error) {
 	// Set Deadline cứng 30s cho request này như AI team yêu cầu
 	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -57,16 +57,23 @@ func (g *grpcAIClient) EstimateVolume(ctx context.Context, imageBytes []byte) (f
 	res, err := g.client.EstimateVolume(reqCtx, req)
 	if err != nil {
 		log.Printf("[gRPC] EstimateVolume failed after %v: %v", time.Since(start), err)
-		return 0, fmt.Errorf("ai inference failed: %w", err)
+		return nil, fmt.Errorf("ai inference failed: %w", err)
 	}
 
-	log.Printf("[gRPC] AI Success | ReqID: %s | Latency: %.2fms | Volume: %.2f cm³ | Conf: %.2f",
-		res.RequestId, res.LatencyMs, res.VolumeCm3, res.Confidence)
+	log.Printf("[gRPC] AI Success | ReqID: %s | Latency: %.2fms | Label: %s (%.2f) | Volume: %.2f cm³ | Conf: %.2f | Mass: %.2fg",
+		res.RequestId, res.LatencyMs, res.FoodLabel, res.FoodLabelConfidence, res.VolumeCm3, res.VolumeConfidence, res.MassG)
 
 	// Có thể throw lỗi nội bộ nếu Confidence quá thấp (< 0.5)
-	if res.Confidence < 0.5 {
-		return 0, fmt.Errorf("ai confidence too low: %.2f", res.Confidence)
+	if res.VolumeConfidence < 0.5 {
+		return nil, fmt.Errorf("ai confidence too low: %.2f", res.VolumeConfidence)
 	}
 
-	return float64(res.VolumeCm3), nil
+	return &domain.InferenceResult{
+		FoodLabel:           res.FoodLabel,
+		FoodLabelConfidence: float64(res.FoodLabelConfidence),
+		VolumeCm3:           float64(res.VolumeCm3),
+		Density:             float64(res.DensityGCm3),
+		MassG:               float64(res.MassG),
+		Confidence:          float64(res.VolumeConfidence),
+	}, nil
 }
