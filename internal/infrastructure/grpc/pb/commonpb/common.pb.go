@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.35.0--rc2
-// source: common.proto
+// source: v1/common.proto
 
-package common
+package commonpb
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -21,485 +21,86 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ─── Gender ──────────────────────────────────────────────────────
-type Gender int32
+type RiskLevel int32
 
 const (
-	Gender_GENDER_UNSPECIFIED Gender = 0
-	Gender_GENDER_MALE        Gender = 1
-	Gender_GENDER_FEMALE      Gender = 2
-	Gender_GENDER_OTHER       Gender = 3
+	RiskLevel_RISK_LEVEL_UNSPECIFIED RiskLevel = 0
+	RiskLevel_RISK_LEVEL_SAFE        RiskLevel = 1
+	RiskLevel_RISK_LEVEL_LOW         RiskLevel = 2
+	RiskLevel_RISK_LEVEL_MEDIUM      RiskLevel = 3
+	RiskLevel_RISK_LEVEL_HIGH        RiskLevel = 4
+	RiskLevel_RISK_LEVEL_CRITICAL    RiskLevel = 5
 )
 
-// Enum value maps for Gender.
+// Enum value maps for RiskLevel.
 var (
-	Gender_name = map[int32]string{
-		0: "GENDER_UNSPECIFIED",
-		1: "GENDER_MALE",
-		2: "GENDER_FEMALE",
-		3: "GENDER_OTHER",
+	RiskLevel_name = map[int32]string{
+		0: "RISK_LEVEL_UNSPECIFIED",
+		1: "RISK_LEVEL_SAFE",
+		2: "RISK_LEVEL_LOW",
+		3: "RISK_LEVEL_MEDIUM",
+		4: "RISK_LEVEL_HIGH",
+		5: "RISK_LEVEL_CRITICAL",
 	}
-	Gender_value = map[string]int32{
-		"GENDER_UNSPECIFIED": 0,
-		"GENDER_MALE":        1,
-		"GENDER_FEMALE":      2,
-		"GENDER_OTHER":       3,
+	RiskLevel_value = map[string]int32{
+		"RISK_LEVEL_UNSPECIFIED": 0,
+		"RISK_LEVEL_SAFE":        1,
+		"RISK_LEVEL_LOW":         2,
+		"RISK_LEVEL_MEDIUM":      3,
+		"RISK_LEVEL_HIGH":        4,
+		"RISK_LEVEL_CRITICAL":    5,
 	}
 )
 
-func (x Gender) Enum() *Gender {
-	p := new(Gender)
+func (x RiskLevel) Enum() *RiskLevel {
+	p := new(RiskLevel)
 	*p = x
 	return p
 }
 
-func (x Gender) String() string {
+func (x RiskLevel) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (Gender) Descriptor() protoreflect.EnumDescriptor {
-	return file_common_proto_enumTypes[0].Descriptor()
+func (RiskLevel) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_common_proto_enumTypes[0].Descriptor()
 }
 
-func (Gender) Type() protoreflect.EnumType {
-	return &file_common_proto_enumTypes[0]
+func (RiskLevel) Type() protoreflect.EnumType {
+	return &file_v1_common_proto_enumTypes[0]
 }
 
-func (x Gender) Number() protoreflect.EnumNumber {
+func (x RiskLevel) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use Gender.Descriptor instead.
-func (Gender) EnumDescriptor() ([]byte, []int) {
-	return file_common_proto_rawDescGZIP(), []int{0}
+// Deprecated: Use RiskLevel.Descriptor instead.
+func (RiskLevel) EnumDescriptor() ([]byte, []int) {
+	return file_v1_common_proto_rawDescGZIP(), []int{0}
 }
 
-// ─── Goal ────────────────────────────────────────────────────────
-type GoalType int32
-
-const (
-	GoalType_GOAL_UNSPECIFIED     GoalType = 0
-	GoalType_GOAL_LOSE_WEIGHT     GoalType = 1
-	GoalType_GOAL_MAINTAIN_WEIGHT GoalType = 2
-	GoalType_GOAL_GAIN_WEIGHT     GoalType = 3
-	GoalType_GOAL_BUILD_MUSCLE    GoalType = 4
-)
-
-// Enum value maps for GoalType.
-var (
-	GoalType_name = map[int32]string{
-		0: "GOAL_UNSPECIFIED",
-		1: "GOAL_LOSE_WEIGHT",
-		2: "GOAL_MAINTAIN_WEIGHT",
-		3: "GOAL_GAIN_WEIGHT",
-		4: "GOAL_BUILD_MUSCLE",
-	}
-	GoalType_value = map[string]int32{
-		"GOAL_UNSPECIFIED":     0,
-		"GOAL_LOSE_WEIGHT":     1,
-		"GOAL_MAINTAIN_WEIGHT": 2,
-		"GOAL_GAIN_WEIGHT":     3,
-		"GOAL_BUILD_MUSCLE":    4,
-	}
-)
-
-func (x GoalType) Enum() *GoalType {
-	p := new(GoalType)
-	*p = x
-	return p
-}
-
-func (x GoalType) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (GoalType) Descriptor() protoreflect.EnumDescriptor {
-	return file_common_proto_enumTypes[1].Descriptor()
-}
-
-func (GoalType) Type() protoreflect.EnumType {
-	return &file_common_proto_enumTypes[1]
-}
-
-func (x GoalType) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use GoalType.Descriptor instead.
-func (GoalType) EnumDescriptor() ([]byte, []int) {
-	return file_common_proto_rawDescGZIP(), []int{1}
-}
-
-// ─── Activity Level ──────────────────────────────────────────────
-type ActivityLevel int32
-
-const (
-	ActivityLevel_ACTIVITY_UNSPECIFIED ActivityLevel = 0
-	ActivityLevel_ACTIVITY_SEDENTARY   ActivityLevel = 1
-	ActivityLevel_ACTIVITY_LIGHT       ActivityLevel = 2
-	ActivityLevel_ACTIVITY_MODERATE    ActivityLevel = 3
-	ActivityLevel_ACTIVITY_ACTIVE      ActivityLevel = 4
-	ActivityLevel_ACTIVITY_VERY_ACTIVE ActivityLevel = 5
-)
-
-// Enum value maps for ActivityLevel.
-var (
-	ActivityLevel_name = map[int32]string{
-		0: "ACTIVITY_UNSPECIFIED",
-		1: "ACTIVITY_SEDENTARY",
-		2: "ACTIVITY_LIGHT",
-		3: "ACTIVITY_MODERATE",
-		4: "ACTIVITY_ACTIVE",
-		5: "ACTIVITY_VERY_ACTIVE",
-	}
-	ActivityLevel_value = map[string]int32{
-		"ACTIVITY_UNSPECIFIED": 0,
-		"ACTIVITY_SEDENTARY":   1,
-		"ACTIVITY_LIGHT":       2,
-		"ACTIVITY_MODERATE":    3,
-		"ACTIVITY_ACTIVE":      4,
-		"ACTIVITY_VERY_ACTIVE": 5,
-	}
-)
-
-func (x ActivityLevel) Enum() *ActivityLevel {
-	p := new(ActivityLevel)
-	*p = x
-	return p
-}
-
-func (x ActivityLevel) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (ActivityLevel) Descriptor() protoreflect.EnumDescriptor {
-	return file_common_proto_enumTypes[2].Descriptor()
-}
-
-func (ActivityLevel) Type() protoreflect.EnumType {
-	return &file_common_proto_enumTypes[2]
-}
-
-func (x ActivityLevel) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use ActivityLevel.Descriptor instead.
-func (ActivityLevel) EnumDescriptor() ([]byte, []int) {
-	return file_common_proto_rawDescGZIP(), []int{2}
-}
-
-// ─── Severity ────────────────────────────────────────────────────
-type SeverityLevel int32
-
-const (
-	SeverityLevel_SEVERITY_UNSPECIFIED SeverityLevel = 0
-	SeverityLevel_MILD                 SeverityLevel = 1
-	SeverityLevel_MODERATE             SeverityLevel = 2
-	SeverityLevel_SEVERE               SeverityLevel = 3
-)
-
-// Enum value maps for SeverityLevel.
-var (
-	SeverityLevel_name = map[int32]string{
-		0: "SEVERITY_UNSPECIFIED",
-		1: "MILD",
-		2: "MODERATE",
-		3: "SEVERE",
-	}
-	SeverityLevel_value = map[string]int32{
-		"SEVERITY_UNSPECIFIED": 0,
-		"MILD":                 1,
-		"MODERATE":             2,
-		"SEVERE":               3,
-	}
-)
-
-func (x SeverityLevel) Enum() *SeverityLevel {
-	p := new(SeverityLevel)
-	*p = x
-	return p
-}
-
-func (x SeverityLevel) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (SeverityLevel) Descriptor() protoreflect.EnumDescriptor {
-	return file_common_proto_enumTypes[3].Descriptor()
-}
-
-func (SeverityLevel) Type() protoreflect.EnumType {
-	return &file_common_proto_enumTypes[3]
-}
-
-func (x SeverityLevel) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use SeverityLevel.Descriptor instead.
-func (SeverityLevel) EnumDescriptor() ([]byte, []int) {
-	return file_common_proto_rawDescGZIP(), []int{3}
-}
-
-// ─── Disease ─────────────────────────────────────────────────────
-type Disease struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Severity      SeverityLevel          `protobuf:"varint,3,opt,name=severity,proto3,enum=nutrix.common.v1.SeverityLevel" json:"severity,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Disease) Reset() {
-	*x = Disease{}
-	mi := &file_common_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Disease) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Disease) ProtoMessage() {}
-
-func (x *Disease) ProtoReflect() protoreflect.Message {
-	mi := &file_common_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Disease.ProtoReflect.Descriptor instead.
-func (*Disease) Descriptor() ([]byte, []int) {
-	return file_common_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *Disease) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *Disease) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *Disease) GetSeverity() SeverityLevel {
-	if x != nil {
-		return x.Severity
-	}
-	return SeverityLevel_SEVERITY_UNSPECIFIED
-}
-
-// ─── User Context ────────────────────────────────────────────────
-// Go Backend builds this from its own DB and passes it to the AI
-// Server. The AI Server NEVER queries user data directly.
-type UserContext struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Age           int32                  `protobuf:"varint,2,opt,name=age,proto3" json:"age,omitempty"`
-	WeightKg      float64                `protobuf:"fixed64,3,opt,name=weight_kg,json=weightKg,proto3" json:"weight_kg,omitempty"`
-	HeightCm      float64                `protobuf:"fixed64,4,opt,name=height_cm,json=heightCm,proto3" json:"height_cm,omitempty"`
-	Gender        Gender                 `protobuf:"varint,5,opt,name=gender,proto3,enum=nutrix.common.v1.Gender" json:"gender,omitempty"`
-	Diseases      []*Disease             `protobuf:"bytes,6,rep,name=diseases,proto3" json:"diseases,omitempty"`
-	Goal          GoalType               `protobuf:"varint,7,opt,name=goal,proto3,enum=nutrix.common.v1.GoalType" json:"goal,omitempty"`
-	Activity      ActivityLevel          `protobuf:"varint,8,opt,name=activity,proto3,enum=nutrix.common.v1.ActivityLevel" json:"activity,omitempty"`
-	Bmr           float64                `protobuf:"fixed64,9,opt,name=bmr,proto3" json:"bmr,omitempty"`
-	Tdee          float64                `protobuf:"fixed64,10,opt,name=tdee,proto3" json:"tdee,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UserContext) Reset() {
-	*x = UserContext{}
-	mi := &file_common_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UserContext) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UserContext) ProtoMessage() {}
-
-func (x *UserContext) ProtoReflect() protoreflect.Message {
-	mi := &file_common_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UserContext.ProtoReflect.Descriptor instead.
-func (*UserContext) Descriptor() ([]byte, []int) {
-	return file_common_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *UserContext) GetUserId() string {
-	if x != nil {
-		return x.UserId
-	}
-	return ""
-}
-
-func (x *UserContext) GetAge() int32 {
-	if x != nil {
-		return x.Age
-	}
-	return 0
-}
-
-func (x *UserContext) GetWeightKg() float64 {
-	if x != nil {
-		return x.WeightKg
-	}
-	return 0
-}
-
-func (x *UserContext) GetHeightCm() float64 {
-	if x != nil {
-		return x.HeightCm
-	}
-	return 0
-}
-
-func (x *UserContext) GetGender() Gender {
-	if x != nil {
-		return x.Gender
-	}
-	return Gender_GENDER_UNSPECIFIED
-}
-
-func (x *UserContext) GetDiseases() []*Disease {
-	if x != nil {
-		return x.Diseases
-	}
-	return nil
-}
-
-func (x *UserContext) GetGoal() GoalType {
-	if x != nil {
-		return x.Goal
-	}
-	return GoalType_GOAL_UNSPECIFIED
-}
-
-func (x *UserContext) GetActivity() ActivityLevel {
-	if x != nil {
-		return x.Activity
-	}
-	return ActivityLevel_ACTIVITY_UNSPECIFIED
-}
-
-func (x *UserContext) GetBmr() float64 {
-	if x != nil {
-		return x.Bmr
-	}
-	return 0
-}
-
-func (x *UserContext) GetTdee() float64 {
-	if x != nil {
-		return x.Tdee
-	}
-	return 0
-}
-
-// ─── Error ───────────────────────────────────────────────────────
-type ErrorInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ErrorInfo) Reset() {
-	*x = ErrorInfo{}
-	mi := &file_common_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ErrorInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ErrorInfo) ProtoMessage() {}
-
-func (x *ErrorInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_common_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ErrorInfo.ProtoReflect.Descriptor instead.
-func (*ErrorInfo) Descriptor() ([]byte, []int) {
-	return file_common_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *ErrorInfo) GetCode() string {
-	if x != nil {
-		return x.Code
-	}
-	return ""
-}
-
-func (x *ErrorInfo) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-// ─── Request Metadata ────────────────────────────────────────────
-// Propagated through Flutter → Go → gRPC → Python → Neo4j
-// for end-to-end distributed tracing.
-type RequestMetadata struct {
+type RequestMeta struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RequestMetadata) Reset() {
-	*x = RequestMetadata{}
-	mi := &file_common_proto_msgTypes[3]
+func (x *RequestMeta) Reset() {
+	*x = RequestMeta{}
+	mi := &file_v1_common_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RequestMetadata) String() string {
+func (x *RequestMeta) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RequestMetadata) ProtoMessage() {}
+func (*RequestMeta) ProtoMessage() {}
 
-func (x *RequestMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_common_proto_msgTypes[3]
+func (x *RequestMeta) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_common_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -510,128 +111,279 @@ func (x *RequestMetadata) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RequestMetadata.ProtoReflect.Descriptor instead.
-func (*RequestMetadata) Descriptor() ([]byte, []int) {
-	return file_common_proto_rawDescGZIP(), []int{3}
+// Deprecated: Use RequestMeta.ProtoReflect.Descriptor instead.
+func (*RequestMeta) Descriptor() ([]byte, []int) {
+	return file_v1_common_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *RequestMetadata) GetRequestId() string {
+func (x *RequestMeta) GetRequestId() string {
 	if x != nil {
 		return x.RequestId
 	}
 	return ""
 }
 
-var File_common_proto protoreflect.FileDescriptor
+type EvidenceNode struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	NodeType      string                 `protobuf:"bytes,2,opt,name=node_type,json=nodeType,proto3" json:"node_type,omitempty"`
+	NodeName      string                 `protobuf:"bytes,3,opt,name=node_name,json=nodeName,proto3" json:"node_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
 
-const file_common_proto_rawDesc = "" +
+func (x *EvidenceNode) Reset() {
+	*x = EvidenceNode{}
+	mi := &file_v1_common_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EvidenceNode) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EvidenceNode) ProtoMessage() {}
+
+func (x *EvidenceNode) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_common_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EvidenceNode.ProtoReflect.Descriptor instead.
+func (*EvidenceNode) Descriptor() ([]byte, []int) {
+	return file_v1_common_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *EvidenceNode) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *EvidenceNode) GetNodeType() string {
+	if x != nil {
+		return x.NodeType
+	}
+	return ""
+}
+
+func (x *EvidenceNode) GetNodeName() string {
+	if x != nil {
+		return x.NodeName
+	}
+	return ""
+}
+
+type EvidenceStep struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Title         string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Node          *EvidenceNode          `protobuf:"bytes,3,opt,name=node,proto3" json:"node,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EvidenceStep) Reset() {
+	*x = EvidenceStep{}
+	mi := &file_v1_common_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EvidenceStep) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EvidenceStep) ProtoMessage() {}
+
+func (x *EvidenceStep) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_common_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EvidenceStep.ProtoReflect.Descriptor instead.
+func (*EvidenceStep) Descriptor() ([]byte, []int) {
+	return file_v1_common_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *EvidenceStep) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *EvidenceStep) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *EvidenceStep) GetNode() *EvidenceNode {
+	if x != nil {
+		return x.Node
+	}
+	return nil
+}
+
+type EvidencePath struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	DiseaseId       string                 `protobuf:"bytes,1,opt,name=disease_id,json=diseaseId,proto3" json:"disease_id,omitempty"`
+	Steps           []*EvidenceStep        `protobuf:"bytes,2,rep,name=steps,proto3" json:"steps,omitempty"`
+	RuleDescription string                 `protobuf:"bytes,3,opt,name=rule_description,json=ruleDescription,proto3" json:"rule_description,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *EvidencePath) Reset() {
+	*x = EvidencePath{}
+	mi := &file_v1_common_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EvidencePath) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EvidencePath) ProtoMessage() {}
+
+func (x *EvidencePath) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_common_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EvidencePath.ProtoReflect.Descriptor instead.
+func (*EvidencePath) Descriptor() ([]byte, []int) {
+	return file_v1_common_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *EvidencePath) GetDiseaseId() string {
+	if x != nil {
+		return x.DiseaseId
+	}
+	return ""
+}
+
+func (x *EvidencePath) GetSteps() []*EvidenceStep {
+	if x != nil {
+		return x.Steps
+	}
+	return nil
+}
+
+func (x *EvidencePath) GetRuleDescription() string {
+	if x != nil {
+		return x.RuleDescription
+	}
+	return ""
+}
+
+var File_v1_common_proto protoreflect.FileDescriptor
+
+const file_v1_common_proto_rawDesc = "" +
 	"\n" +
-	"\fcommon.proto\x12\x10nutrix.common.v1\"j\n" +
-	"\aDisease\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12;\n" +
-	"\bseverity\x18\x03 \x01(\x0e2\x1f.nutrix.common.v1.SeverityLevelR\bseverity\"\xee\x02\n" +
-	"\vUserContext\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x10\n" +
-	"\x03age\x18\x02 \x01(\x05R\x03age\x12\x1b\n" +
-	"\tweight_kg\x18\x03 \x01(\x01R\bweightKg\x12\x1b\n" +
-	"\theight_cm\x18\x04 \x01(\x01R\bheightCm\x120\n" +
-	"\x06gender\x18\x05 \x01(\x0e2\x18.nutrix.common.v1.GenderR\x06gender\x125\n" +
-	"\bdiseases\x18\x06 \x03(\v2\x19.nutrix.common.v1.DiseaseR\bdiseases\x12.\n" +
-	"\x04goal\x18\a \x01(\x0e2\x1a.nutrix.common.v1.GoalTypeR\x04goal\x12;\n" +
-	"\bactivity\x18\b \x01(\x0e2\x1f.nutrix.common.v1.ActivityLevelR\bactivity\x12\x10\n" +
-	"\x03bmr\x18\t \x01(\x01R\x03bmr\x12\x12\n" +
-	"\x04tdee\x18\n" +
-	" \x01(\x01R\x04tdee\"9\n" +
-	"\tErrorInfo\x12\x12\n" +
-	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"0\n" +
-	"\x0fRequestMetadata\x12\x1d\n" +
+	"\x0fv1/common.proto\x12\x10nutrix.common.v1\",\n" +
+	"\vRequestMeta\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId*V\n" +
-	"\x06Gender\x12\x16\n" +
-	"\x12GENDER_UNSPECIFIED\x10\x00\x12\x0f\n" +
-	"\vGENDER_MALE\x10\x01\x12\x11\n" +
-	"\rGENDER_FEMALE\x10\x02\x12\x10\n" +
-	"\fGENDER_OTHER\x10\x03*}\n" +
-	"\bGoalType\x12\x14\n" +
-	"\x10GOAL_UNSPECIFIED\x10\x00\x12\x14\n" +
-	"\x10GOAL_LOSE_WEIGHT\x10\x01\x12\x18\n" +
-	"\x14GOAL_MAINTAIN_WEIGHT\x10\x02\x12\x14\n" +
-	"\x10GOAL_GAIN_WEIGHT\x10\x03\x12\x15\n" +
-	"\x11GOAL_BUILD_MUSCLE\x10\x04*\x9b\x01\n" +
-	"\rActivityLevel\x12\x18\n" +
-	"\x14ACTIVITY_UNSPECIFIED\x10\x00\x12\x16\n" +
-	"\x12ACTIVITY_SEDENTARY\x10\x01\x12\x12\n" +
-	"\x0eACTIVITY_LIGHT\x10\x02\x12\x15\n" +
-	"\x11ACTIVITY_MODERATE\x10\x03\x12\x13\n" +
-	"\x0fACTIVITY_ACTIVE\x10\x04\x12\x18\n" +
-	"\x14ACTIVITY_VERY_ACTIVE\x10\x05*M\n" +
-	"\rSeverityLevel\x12\x18\n" +
-	"\x14SEVERITY_UNSPECIFIED\x10\x00\x12\b\n" +
-	"\x04MILD\x10\x01\x12\f\n" +
-	"\bMODERATE\x10\x02\x12\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\"a\n" +
+	"\fEvidenceNode\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1b\n" +
+	"\tnode_type\x18\x02 \x01(\tR\bnodeType\x12\x1b\n" +
+	"\tnode_name\x18\x03 \x01(\tR\bnodeName\"z\n" +
+	"\fEvidenceStep\x12\x14\n" +
+	"\x05title\x18\x01 \x01(\tR\x05title\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x122\n" +
+	"\x04node\x18\x03 \x01(\v2\x1e.nutrix.common.v1.EvidenceNodeR\x04node\"\x8e\x01\n" +
+	"\fEvidencePath\x12\x1d\n" +
 	"\n" +
-	"\x06SEVERE\x10\x03B7Z5github.com/phuongngo25/nutrix-contracts/gen/go/commonb\x06proto3"
+	"disease_id\x18\x01 \x01(\tR\tdiseaseId\x124\n" +
+	"\x05steps\x18\x02 \x03(\v2\x1e.nutrix.common.v1.EvidenceStepR\x05steps\x12)\n" +
+	"\x10rule_description\x18\x03 \x01(\tR\x0fruleDescription*\x95\x01\n" +
+	"\tRiskLevel\x12\x1a\n" +
+	"\x16RISK_LEVEL_UNSPECIFIED\x10\x00\x12\x13\n" +
+	"\x0fRISK_LEVEL_SAFE\x10\x01\x12\x12\n" +
+	"\x0eRISK_LEVEL_LOW\x10\x02\x12\x15\n" +
+	"\x11RISK_LEVEL_MEDIUM\x10\x03\x12\x13\n" +
+	"\x0fRISK_LEVEL_HIGH\x10\x04\x12\x17\n" +
+	"\x13RISK_LEVEL_CRITICAL\x10\x05B0Z.github.com/nutrix/api/proto/common/v1;commonpbb\x06proto3"
 
 var (
-	file_common_proto_rawDescOnce sync.Once
-	file_common_proto_rawDescData []byte
+	file_v1_common_proto_rawDescOnce sync.Once
+	file_v1_common_proto_rawDescData []byte
 )
 
-func file_common_proto_rawDescGZIP() []byte {
-	file_common_proto_rawDescOnce.Do(func() {
-		file_common_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_common_proto_rawDesc), len(file_common_proto_rawDesc)))
+func file_v1_common_proto_rawDescGZIP() []byte {
+	file_v1_common_proto_rawDescOnce.Do(func() {
+		file_v1_common_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_v1_common_proto_rawDesc), len(file_v1_common_proto_rawDesc)))
 	})
-	return file_common_proto_rawDescData
+	return file_v1_common_proto_rawDescData
 }
 
-var file_common_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_common_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_common_proto_goTypes = []any{
-	(Gender)(0),             // 0: nutrix.common.v1.Gender
-	(GoalType)(0),           // 1: nutrix.common.v1.GoalType
-	(ActivityLevel)(0),      // 2: nutrix.common.v1.ActivityLevel
-	(SeverityLevel)(0),      // 3: nutrix.common.v1.SeverityLevel
-	(*Disease)(nil),         // 4: nutrix.common.v1.Disease
-	(*UserContext)(nil),     // 5: nutrix.common.v1.UserContext
-	(*ErrorInfo)(nil),       // 6: nutrix.common.v1.ErrorInfo
-	(*RequestMetadata)(nil), // 7: nutrix.common.v1.RequestMetadata
+var file_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_v1_common_proto_goTypes = []any{
+	(RiskLevel)(0),       // 0: nutrix.common.v1.RiskLevel
+	(*RequestMeta)(nil),  // 1: nutrix.common.v1.RequestMeta
+	(*EvidenceNode)(nil), // 2: nutrix.common.v1.EvidenceNode
+	(*EvidenceStep)(nil), // 3: nutrix.common.v1.EvidenceStep
+	(*EvidencePath)(nil), // 4: nutrix.common.v1.EvidencePath
 }
-var file_common_proto_depIdxs = []int32{
-	3, // 0: nutrix.common.v1.Disease.severity:type_name -> nutrix.common.v1.SeverityLevel
-	0, // 1: nutrix.common.v1.UserContext.gender:type_name -> nutrix.common.v1.Gender
-	4, // 2: nutrix.common.v1.UserContext.diseases:type_name -> nutrix.common.v1.Disease
-	1, // 3: nutrix.common.v1.UserContext.goal:type_name -> nutrix.common.v1.GoalType
-	2, // 4: nutrix.common.v1.UserContext.activity:type_name -> nutrix.common.v1.ActivityLevel
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+var file_v1_common_proto_depIdxs = []int32{
+	2, // 0: nutrix.common.v1.EvidenceStep.node:type_name -> nutrix.common.v1.EvidenceNode
+	3, // 1: nutrix.common.v1.EvidencePath.steps:type_name -> nutrix.common.v1.EvidenceStep
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
-func init() { file_common_proto_init() }
-func file_common_proto_init() {
-	if File_common_proto != nil {
+func init() { file_v1_common_proto_init() }
+func file_v1_common_proto_init() {
+	if File_v1_common_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_proto_rawDesc), len(file_common_proto_rawDesc)),
-			NumEnums:      4,
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_common_proto_rawDesc), len(file_v1_common_proto_rawDesc)),
+			NumEnums:      1,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_common_proto_goTypes,
-		DependencyIndexes: file_common_proto_depIdxs,
-		EnumInfos:         file_common_proto_enumTypes,
-		MessageInfos:      file_common_proto_msgTypes,
+		GoTypes:           file_v1_common_proto_goTypes,
+		DependencyIndexes: file_v1_common_proto_depIdxs,
+		EnumInfos:         file_v1_common_proto_enumTypes,
+		MessageInfos:      file_v1_common_proto_msgTypes,
 	}.Build()
-	File_common_proto = out.File
-	file_common_proto_goTypes = nil
-	file_common_proto_depIdxs = nil
+	File_v1_common_proto = out.File
+	file_v1_common_proto_goTypes = nil
+	file_v1_common_proto_depIdxs = nil
 }

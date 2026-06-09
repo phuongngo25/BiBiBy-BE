@@ -4,15 +4,32 @@ import (
 	"context"
 	"io/ioutil"
 	"log"
+	"os"
 	"testing"
 	"time"
 
 	"nutrix-backend/internal/infrastructure"
 )
 
+func requireAIIntegrationTarget(t *testing.T) string {
+	t.Helper()
+
+	if os.Getenv("NUTRIX_RUN_AI_INTEGRATION") != "1" {
+		t.Skip("set NUTRIX_RUN_AI_INTEGRATION=1 to run AI gRPC integration tests")
+	}
+
+	target := os.Getenv("NUTRIX_AI_GRPC_TARGET")
+	if target == "" {
+		target = "localhost:50051"
+	}
+	return target
+}
+
 func TestGrpcAIClient_EstimateVolume(t *testing.T) {
+	target := requireAIIntegrationTarget(t)
+
 	// Khởi tạo client tới AI server
-	client, err := infrastructure.NewGrpcAIClient("localhost:50051")
+	client, err := infrastructure.NewGrpcAIClient(target)
 	if err != nil {
 		t.Fatalf("Failed to create grpc client: %v", err)
 	}
@@ -44,14 +61,16 @@ func TestGrpcAIClient_EstimateVolume(t *testing.T) {
 	log.Printf(" - DensityG_Cm3: %.2f", result.Density)
 	log.Printf(" - MassG: %.2f", result.MassG)
 	log.Printf(" - Confidence: %.2f", result.Confidence)
-	
+
 	if result.MassG == 0 {
 		t.Errorf("MassG is 0, which means density mismatch still exists or is unhandled")
 	}
 }
 
 func TestGrpcAIClient_AnalyzeMealImage(t *testing.T) {
-	client, err := infrastructure.NewGrpcAIClient("localhost:50051")
+	target := requireAIIntegrationTarget(t)
+
+	client, err := infrastructure.NewGrpcAIClient(target)
 	if err != nil {
 		t.Fatalf("Failed to create grpc client: %v", err)
 	}

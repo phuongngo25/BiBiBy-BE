@@ -16,4 +16,5 @@ var (
 	ErrReuseDetected       = errors.New("refresh token reuse detected")
 	ErrLogNotFound         = errors.New("food log entry not found")
 	ErrInvalidQuantity     = errors.New("invalid quantity: must be between 1 and 5000 grams")
+	ErrAllCandidatesRejected = errors.New("all candidate meals were rejected due to safety violations")
 )

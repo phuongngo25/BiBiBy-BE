@@ -18,13 +18,35 @@ service InferenceService {
   // Unary RPC: single image in, single volume estimate out.
   rpc EstimateVolume (EstimateVolumeRequest) returns (EstimateVolumeResponse);
 
+  // Request a presigned URL to upload a meal image to S3
+  rpc CreateUploadSession (CreateUploadSessionRequest) returns (CreateUploadSessionResponse);
+
+  // Confirm that the client has successfully uploaded the file to S3
+  rpc ConfirmUpload (ConfirmUploadRequest) returns (ConfirmUploadResponse);
+
   // Consolidated E2E Pipeline: Image -> CV -> Enrichment -> KG Reasoning -> Recommendation
   rpc AnalyzeMealImage (AnalyzeMealImageRequest) returns (AnalyzeMealImageResponse);
 }
 
+message CreateUploadSessionRequest {}
+
+message CreateUploadSessionResponse {
+  string upload_session_id = 1;
+  string presigned_url = 2;
+  int64 expires_at = 3;
+}
+
+message ConfirmUploadRequest {
+  string upload_session_id = 1;
+}
+
+message ConfirmUploadResponse {
+  string upload_session_id = 1;
+  bool success = 2;
+}
+
 message AnalyzeMealImageRequest {
-  // Raw image bytes (JPEG/PNG). Do NOT Base64-encode.
-  bytes image_data = 1;
+  string upload_session_id = 1;
   // Optional user context for KG reasoning (e.g. "diabetes", "hypertension")
   repeated string user_diseases = 2;
 }

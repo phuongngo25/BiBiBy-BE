@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             v7.35.0--rc2
-// source: api/proto/inference.proto
+// source: inference.proto
 
 package inferencev1
 
@@ -19,8 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	InferenceService_EstimateVolume_FullMethodName   = "/nutrix.inference.InferenceService/EstimateVolume"
-	InferenceService_AnalyzeMealImage_FullMethodName = "/nutrix.inference.InferenceService/AnalyzeMealImage"
+	InferenceService_EstimateVolume_FullMethodName      = "/nutrix.inference.InferenceService/EstimateVolume"
+	InferenceService_CreateUploadSession_FullMethodName = "/nutrix.inference.InferenceService/CreateUploadSession"
+	InferenceService_ConfirmUpload_FullMethodName       = "/nutrix.inference.InferenceService/ConfirmUpload"
+	InferenceService_AnalyzeMealImage_FullMethodName    = "/nutrix.inference.InferenceService/AnalyzeMealImage"
 )
 
 // InferenceServiceClient is the client API for InferenceService service.
@@ -29,6 +31,10 @@ const (
 type InferenceServiceClient interface {
 	// Unary RPC: single image in, single volume estimate out.
 	EstimateVolume(ctx context.Context, in *EstimateVolumeRequest, opts ...grpc.CallOption) (*EstimateVolumeResponse, error)
+	// Request a presigned URL to upload a meal image to S3
+	CreateUploadSession(ctx context.Context, in *CreateUploadSessionRequest, opts ...grpc.CallOption) (*CreateUploadSessionResponse, error)
+	// Confirm that the client has successfully uploaded the file to S3
+	ConfirmUpload(ctx context.Context, in *ConfirmUploadRequest, opts ...grpc.CallOption) (*ConfirmUploadResponse, error)
 	// Consolidated E2E Pipeline: Image -> CV -> Enrichment -> KG Reasoning -> Recommendation
 	AnalyzeMealImage(ctx context.Context, in *AnalyzeMealImageRequest, opts ...grpc.CallOption) (*AnalyzeMealImageResponse, error)
 }
@@ -51,6 +57,26 @@ func (c *inferenceServiceClient) EstimateVolume(ctx context.Context, in *Estimat
 	return out, nil
 }
 
+func (c *inferenceServiceClient) CreateUploadSession(ctx context.Context, in *CreateUploadSessionRequest, opts ...grpc.CallOption) (*CreateUploadSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateUploadSessionResponse)
+	err := c.cc.Invoke(ctx, InferenceService_CreateUploadSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *inferenceServiceClient) ConfirmUpload(ctx context.Context, in *ConfirmUploadRequest, opts ...grpc.CallOption) (*ConfirmUploadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfirmUploadResponse)
+	err := c.cc.Invoke(ctx, InferenceService_ConfirmUpload_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *inferenceServiceClient) AnalyzeMealImage(ctx context.Context, in *AnalyzeMealImageRequest, opts ...grpc.CallOption) (*AnalyzeMealImageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AnalyzeMealImageResponse)
@@ -67,6 +93,10 @@ func (c *inferenceServiceClient) AnalyzeMealImage(ctx context.Context, in *Analy
 type InferenceServiceServer interface {
 	// Unary RPC: single image in, single volume estimate out.
 	EstimateVolume(context.Context, *EstimateVolumeRequest) (*EstimateVolumeResponse, error)
+	// Request a presigned URL to upload a meal image to S3
+	CreateUploadSession(context.Context, *CreateUploadSessionRequest) (*CreateUploadSessionResponse, error)
+	// Confirm that the client has successfully uploaded the file to S3
+	ConfirmUpload(context.Context, *ConfirmUploadRequest) (*ConfirmUploadResponse, error)
 	// Consolidated E2E Pipeline: Image -> CV -> Enrichment -> KG Reasoning -> Recommendation
 	AnalyzeMealImage(context.Context, *AnalyzeMealImageRequest) (*AnalyzeMealImageResponse, error)
 	mustEmbedUnimplementedInferenceServiceServer()
@@ -81,6 +111,12 @@ type UnimplementedInferenceServiceServer struct{}
 
 func (UnimplementedInferenceServiceServer) EstimateVolume(context.Context, *EstimateVolumeRequest) (*EstimateVolumeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EstimateVolume not implemented")
+}
+func (UnimplementedInferenceServiceServer) CreateUploadSession(context.Context, *CreateUploadSessionRequest) (*CreateUploadSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateUploadSession not implemented")
+}
+func (UnimplementedInferenceServiceServer) ConfirmUpload(context.Context, *ConfirmUploadRequest) (*ConfirmUploadResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfirmUpload not implemented")
 }
 func (UnimplementedInferenceServiceServer) AnalyzeMealImage(context.Context, *AnalyzeMealImageRequest) (*AnalyzeMealImageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AnalyzeMealImage not implemented")
@@ -124,6 +160,42 @@ func _InferenceService_EstimateVolume_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _InferenceService_CreateUploadSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateUploadSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(InferenceServiceServer).CreateUploadSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: InferenceService_CreateUploadSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(InferenceServiceServer).CreateUploadSession(ctx, req.(*CreateUploadSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _InferenceService_ConfirmUpload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfirmUploadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(InferenceServiceServer).ConfirmUpload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: InferenceService_ConfirmUpload_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(InferenceServiceServer).ConfirmUpload(ctx, req.(*ConfirmUploadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _InferenceService_AnalyzeMealImage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AnalyzeMealImageRequest)
 	if err := dec(in); err != nil {
@@ -154,10 +226,18 @@ var InferenceService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _InferenceService_EstimateVolume_Handler,
 		},
 		{
+			MethodName: "CreateUploadSession",
+			Handler:    _InferenceService_CreateUploadSession_Handler,
+		},
+		{
+			MethodName: "ConfirmUpload",
+			Handler:    _InferenceService_ConfirmUpload_Handler,
+		},
+		{
 			MethodName: "AnalyzeMealImage",
 			Handler:    _InferenceService_AnalyzeMealImage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "api/proto/inference.proto",
+	Metadata: "inference.proto",
 }

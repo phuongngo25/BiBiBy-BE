@@ -36,48 +36,71 @@ func (r *postgresNutritionRepository) GetFoodByID(ctx context.Context, id uuid.U
 	return &food, nil
 }
 
-// SearchFoods implements Fuzzy Logic + Relevance Ranking against the local DB.
-//
-// Matching rules (OR — any match qualifies):
-//   - name_en ILIKE '%query%'   (substring, case-insensitive)
-//   - name_vi ILIKE '%query%'
-//   - similarity(name_en, query) > 0.2   (pg_trgm fuzzy — catches typos)
-//
-// Relevance ordering (best match first):
-//  1. Exact match        → name_en ILIKE 'query'     (score 0)
-//  2. Prefix match       → name_en ILIKE 'query%'    (score 1)
-//  3. Fuzzy/substring    → ranked by similarity() DESC
-//  3b. Length tiebreaker → LENGTH(name_en) ASC
-//
-// Hard cap: 50 results.
+// SearchFoods searches the catalog without applying profile safety filters.
+// It uses unaccent matching so users can find Vietnamese names with plain ASCII
+// input, e.g. "Pho" matches Vietnamese accented variants.
 func (r *postgresNutritionRepository) SearchFoods(ctx context.Context, keyword string) ([]domain.Food, error) {
-	if len(strings.TrimSpace(keyword)) < 2 {
+	query := strings.TrimSpace(keyword)
+	if len(query) < 2 {
 		return []domain.Food{}, nil
 	}
 
 	const searchSQL = `
 		SELECT * FROM foods
 		WHERE
-			name_en ILIKE '%' || ? || '%'
-			OR name_vi ILIKE '%' || ? || '%'
-			OR similarity(name_en, ?) > 0.2
+			unaccent(name) ILIKE unaccent('%' || ? || '%')
+			OR unaccent(name_en) ILIKE unaccent('%' || ? || '%')
+			OR unaccent(name_vi) ILIKE unaccent('%' || ? || '%')
+			OR code ILIKE '%' || ? || '%'
+			OR (
+				length(?) >= 4
+				AND GREATEST(
+					similarity(unaccent(name), unaccent(?)),
+					similarity(unaccent(name_en), unaccent(?)),
+					similarity(unaccent(name_vi), unaccent(?))
+				) > 0.25
+			)
 		ORDER BY
-			(name_en ILIKE ?)                DESC,
-			(name_en ILIKE ? || '%')         DESC,
-			similarity(name_en, ?)           DESC,
-			LENGTH(name_en)                  ASC
+			(
+				lower(unaccent(name)) = lower(unaccent(?))
+				OR lower(unaccent(name_en)) = lower(unaccent(?))
+				OR lower(unaccent(name_vi)) = lower(unaccent(?))
+			) DESC,
+			(
+				unaccent(name) ILIKE unaccent(? || '%')
+				OR unaccent(name_en) ILIKE unaccent(? || '%')
+				OR unaccent(name_vi) ILIKE unaccent(? || '%')
+			) DESC,
+			(source IN ('VFA', 'VFA_DISH', 'VFA_Estimated')) DESC,
+			GREATEST(
+				similarity(unaccent(name), unaccent(?)),
+				similarity(unaccent(name_en), unaccent(?)),
+				similarity(unaccent(name_vi), unaccent(?))
+			) DESC,
+			LENGTH(COALESCE(NULLIF(name_en, ''), name)) ASC
 		LIMIT 50
 	`
 
 	var foods []domain.Food
 	err := r.db.WithContext(ctx).Raw(
 		searchSQL,
-		keyword, // ILIKE '%?%' name_en
-		keyword, // ILIKE '%?%' name_vi
-		keyword, // similarity(name_en, ?)
-		keyword, // exact: name_en ILIKE ?
-		keyword, // prefix: name_en ILIKE ?%
-		keyword, // similarity ORDER BY
+		query, // name substring
+		query, // name_en substring
+		query, // name_vi substring
+		query, // code substring
+		query, // fuzzy minimum length
+		query, // similarity(name)
+		query, // similarity(name_en)
+		query, // similarity(name_vi)
+		query, // exact name
+		query, // exact name_en
+		query, // exact name_vi
+		query, // prefix name
+		query, // prefix name_en
+		query, // prefix name_vi
+		query, // similarity order name
+		query, // similarity order name_en
+		query, // similarity order name_vi
 	).Scan(&foods).Error
 
 	if err != nil {
@@ -327,7 +350,7 @@ func (r *postgresNutritionRepository) GetConsumedRange(ctx context.Context, user
 	if err != nil {
 		return nil, err
 	}
-	
+
 	aggregates := make([]domain.DailyCalorieAggregate, len(rows))
 	for i, r := range rows {
 		aggregates[i] = domain.DailyCalorieAggregate{
@@ -355,7 +378,7 @@ func (r *postgresNutritionRepository) GetBurnedRange(ctx context.Context, userID
 	if err != nil {
 		return nil, err
 	}
-	
+
 	aggregates := make([]domain.DailyCalorieAggregate, len(rows))
 	for i, r := range rows {
 		aggregates[i] = domain.DailyCalorieAggregate{
@@ -383,7 +406,7 @@ func (r *postgresNutritionRepository) GetWaterRange(ctx context.Context, userID 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	aggregates := make([]domain.DailyWaterAggregate, len(rows))
 	for i, r := range rows {
 		aggregates[i] = domain.DailyWaterAggregate{
@@ -413,5 +436,3 @@ func (r *postgresNutritionRepository) GetFirstSnapshotDate(ctx context.Context, 
 	}
 	return dates[0], nil
 }
-
-

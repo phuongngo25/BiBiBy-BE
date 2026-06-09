@@ -13,9 +13,11 @@ import (
 // --- Mock Repositories ---
 
 type mockNutritionRepo struct {
-	logs           []domain.MealLog
-	weeklyConsumed map[string]float64
-	weeklyBurned   map[string]float64
+	logs             []domain.MealLog
+	weeklyConsumed   map[string]float64
+	weeklyBurned     map[string]float64
+	waterAmount      int
+	waterDateQueried time.Time
 }
 
 func (m *mockNutritionRepo) GetMealLogForUpdate(ctx context.Context, userID uuid.UUID, logID uuid.UUID) (*domain.MealLog, error) {
@@ -58,8 +60,9 @@ func (m *mockNutritionRepo) GetWeeklyBurned(_ context.Context, _ uuid.UUID, _ in
 func (m *mockNutritionRepo) LogWater(_ context.Context, _ *domain.WaterLog) error {
 	return nil
 }
-func (m *mockNutritionRepo) GetDailyConsumedWater(_ context.Context, _ uuid.UUID, _ time.Time) (int, error) {
-	return 0, nil
+func (m *mockNutritionRepo) GetDailyConsumedWater(_ context.Context, _ uuid.UUID, date time.Time) (int, error) {
+	m.waterDateQueried = date
+	return m.waterAmount, nil
 }
 func (m *mockNutritionRepo) GetOrCreateSnapshot(ctx context.Context, snapshot *domain.DailyHealthSnapshot) (*domain.DailyHealthSnapshot, error) {
 	return snapshot, nil
@@ -114,7 +117,9 @@ func (m *mockWorkoutRepo) GetDailyBurnedCalories(ctx context.Context, userID uui
 	return m.burned, nil
 }
 
-type mockUserRepo struct{}
+type mockUserRepo struct {
+	user *domain.User
+}
 
 func (m *mockUserRepo) Create(ctx context.Context, user *domain.User) error { return nil }
 func (m *mockUserRepo) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
@@ -124,12 +129,17 @@ func (m *mockUserRepo) GetByUsername(ctx context.Context, username string) (*dom
 	return nil, nil
 }
 func (m *mockUserRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
+	if m.user != nil {
+		return m.user, nil
+	}
 	return &domain.User{TDEE: 2000.0}, nil
 }
 func (m *mockUserRepo) UpdateProfile(ctx context.Context, id uuid.UUID, req *domain.UpdateProfileRequest) error {
 	return nil
 }
-func (m *mockUserRepo) SaveRefreshToken(ctx context.Context, rt *domain.RefreshToken) error { return nil }
+func (m *mockUserRepo) SaveRefreshToken(ctx context.Context, rt *domain.RefreshToken) error {
+	return nil
+}
 func (m *mockUserRepo) GetRefreshTokenByHash(ctx context.Context, hash string) (*domain.RefreshToken, error) {
 	return nil, nil
 }
@@ -152,7 +162,7 @@ func TestGetDailyPlan_BurnedCalories(t *testing.T) {
 	}
 	workoutRepo := &mockWorkoutRepo{burned: 450.5}
 
-	uc := usecase.NewNutritionUseCase(nutriRepo, nil, nil, nil, workoutRepo, &mockUserRepo{}, nil)
+	uc := usecase.NewNutritionUseCase(nutriRepo, nil, nil, nil, workoutRepo, &mockUserRepo{}, nil, nil, nil)
 
 	plan, err := uc.GetDailyPlan(ctx, userID, time.Now().Format("2006-01-02"))
 	if err != nil {
@@ -166,6 +176,38 @@ func TestGetDailyPlan_BurnedCalories(t *testing.T) {
 	}
 }
 
+func TestGetDailyPlan_UsesUserTimezoneForWaterAggregation(t *testing.T) {
+	ctx := context.Background()
+	userID := uuid.New()
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	if err != nil {
+		t.Fatalf("load location: %v", err)
+	}
+
+	nutriRepo := &mockNutritionRepo{waterAmount: 150}
+	workoutRepo := &mockWorkoutRepo{}
+	userRepo := &mockUserRepo{user: &domain.User{
+		TDEE:     2000,
+		Timezone: "Asia/Ho_Chi_Minh",
+	}}
+	uc := usecase.NewNutritionUseCase(nutriRepo, nil, nil, nil, workoutRepo, userRepo, nil, nil, nil)
+
+	plan, err := uc.GetDailyPlan(ctx, userID, "2026-06-09")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if plan.ConsumedWater != 150 {
+		t.Fatalf("expected consumed water from repository, got %d", plan.ConsumedWater)
+	}
+	if nutriRepo.waterDateQueried.Location().String() != loc.String() {
+		t.Fatalf("expected water query in %s, got %s", loc, nutriRepo.waterDateQueried.Location())
+	}
+	if nutriRepo.waterDateQueried.Format(time.RFC3339) != "2026-06-09T00:00:00+07:00" {
+		t.Fatalf("unexpected water date: %s", nutriRepo.waterDateQueried.Format(time.RFC3339))
+	}
+}
+
 // TestGetWeeklyAnalytics_ExactlySevenPoints verifies that the response always
 // contains exactly 7 DayAnalytics entries even when the DB has no data.
 func TestGetWeeklyAnalytics_ExactlySevenPoints(t *testing.T) {
@@ -174,7 +216,7 @@ func TestGetWeeklyAnalytics_ExactlySevenPoints(t *testing.T) {
 
 	nutriRepo := &mockNutritionRepo{} // empty → all days default to 0
 	workoutRepo := &mockWorkoutRepo{}
-	uc := usecase.NewNutritionUseCase(nutriRepo, nil, nil, nil, workoutRepo, &mockUserRepo{}, nil)
+	uc := usecase.NewNutritionUseCase(nutriRepo, nil, nil, nil, workoutRepo, &mockUserRepo{}, nil, nil, nil)
 
 	resp, err := uc.GetWeeklyAnalytics(ctx, userID, 7, false)
 	if err != nil {
@@ -209,7 +251,7 @@ func TestGetWeeklyAnalytics_SumsCorrect(t *testing.T) {
 		},
 	}
 	workoutRepo := &mockWorkoutRepo{}
-	uc := usecase.NewNutritionUseCase(nutriRepo, nil, nil, nil, workoutRepo, &mockUserRepo{}, nil)
+	uc := usecase.NewNutritionUseCase(nutriRepo, nil, nil, nil, workoutRepo, &mockUserRepo{}, nil, nil, nil)
 
 	resp, err := uc.GetWeeklyAnalytics(ctx, userID, 7, false)
 	if err != nil {
@@ -240,7 +282,7 @@ func TestGetWeeklyAnalytics_SumsCorrect(t *testing.T) {
 
 func TestAIFoodRegistryCoverage(t *testing.T) {
 	// The VNFoodClassifier has exactly 30 classes.
-	// This test prevents developer from adding a label to the AI 
+	// This test prevents developer from adding a label to the AI
 	// without adding it to the AIFoodRegistry Go map.
 	expectedCount := 30
 	if len(usecase.AIFoodRegistry) != expectedCount {

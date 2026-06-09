@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             v7.35.0--rc2
-// source: nutrition_intelligence.proto
+// source: v1/nutrition_intelligence.proto
 
-package intelligence
+package intelligencepb
 
 import (
 	context "context"
@@ -19,38 +19,36 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	NutritionIntelligenceService_Ping_FullMethodName              = "/nutrix.intelligence.v1.NutritionIntelligenceService/Ping"
-	NutritionIntelligenceService_HealthCheck_FullMethodName       = "/nutrix.intelligence.v1.NutritionIntelligenceService/HealthCheck"
-	NutritionIntelligenceService_AnalyzeFood_FullMethodName       = "/nutrix.intelligence.v1.NutritionIntelligenceService/AnalyzeFood"
-	NutritionIntelligenceService_BatchAnalyzeFoods_FullMethodName = "/nutrix.intelligence.v1.NutritionIntelligenceService/BatchAnalyzeFoods"
-	NutritionIntelligenceService_ExplainFood_FullMethodName       = "/nutrix.intelligence.v1.NutritionIntelligenceService/ExplainFood"
-	NutritionIntelligenceService_RecommendFoods_FullMethodName    = "/nutrix.intelligence.v1.NutritionIntelligenceService/RecommendFoods"
+	NutritionIntelligenceService_HealthCheck_FullMethodName          = "/nutrix.intelligence.v1.NutritionIntelligenceService/HealthCheck"
+	NutritionIntelligenceService_AnalyzeFood_FullMethodName          = "/nutrix.intelligence.v1.NutritionIntelligenceService/AnalyzeFood"
+	NutritionIntelligenceService_GetThresholdSnapshot_FullMethodName = "/nutrix.intelligence.v1.NutritionIntelligenceService/GetThresholdSnapshot"
+	NutritionIntelligenceService_SubmitFoodCorrection_FullMethodName = "/nutrix.intelligence.v1.NutritionIntelligenceService/SubmitFoodCorrection"
+	NutritionIntelligenceService_GetFeedbackAnalytics_FullMethodName = "/nutrix.intelligence.v1.NutritionIntelligenceService/GetFeedbackAnalytics"
+	NutritionIntelligenceService_GetNutritionGap_FullMethodName      = "/nutrix.intelligence.v1.NutritionIntelligenceService/GetNutritionGap"
+	NutritionIntelligenceService_GetRecommendations_FullMethodName   = "/nutrix.intelligence.v1.NutritionIntelligenceService/GetRecommendations"
+	NutritionIntelligenceService_AnalyzeMeal_FullMethodName          = "/nutrix.intelligence.v1.NutritionIntelligenceService/AnalyzeMeal"
 )
 
 // NutritionIntelligenceServiceClient is the client API for NutritionIntelligenceService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-//
-// ═════════════════════════════════════════════════════════════════
-// NutritionIntelligenceService
-//
-// The single public-facing gRPC service that Go Backend calls.
-// Flutter → Go Backend (JWT verify) → gRPC → AI Server → Neo4j
-// ═════════════════════════════════════════════════════════════════
 type NutritionIntelligenceServiceClient interface {
-	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
-	// Phase 1: Verify AI Server + Neo4j are operational
+	// Basic connectivity and dependency check
 	HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error)
-	// Phase 2: Full food analysis — safety, risks, violations,
-	//
-	//	summary, alternatives — in a single roundtrip
+	// Analyzes a single food for safety and risk
 	AnalyzeFood(ctx context.Context, in *AnalyzeFoodRequest, opts ...grpc.CallOption) (*AnalyzeFoodResponse, error)
-	// Phase 3: Batch analysis for Diary (Breakfast/Lunch/Dinner/Snack)
-	BatchAnalyzeFoods(ctx context.Context, in *BatchAnalyzeFoodsRequest, opts ...grpc.CallOption) (*BatchAnalyzeFoodsResponse, error)
-	// Phase 4: Graph-based explanation (user taps "Why?")
-	ExplainFood(ctx context.Context, in *ExplainFoodRequest, opts ...grpc.CallOption) (*ExplainFoodResponse, error)
-	// Phase 5 (Sprint 12): Recommendation Ranking Engine
-	RecommendFoods(ctx context.Context, in *RecommendFoodsRequest, opts ...grpc.CallOption) (*RecommendFoodsResponse, error)
+	// Retrieves a snapshot of the dynamically resolved thresholds
+	GetThresholdSnapshot(ctx context.Context, in *GetThresholdSnapshotRequest, opts ...grpc.CallOption) (*GetThresholdSnapshotResponse, error)
+	// Submits a user correction for an AI food prediction
+	SubmitFoodCorrection(ctx context.Context, in *SubmitFoodCorrectionRequest, opts ...grpc.CallOption) (*SubmitFoodCorrectionResponse, error)
+	// Retrieves analytics on user feedback and AI corrections
+	GetFeedbackAnalytics(ctx context.Context, in *GetFeedbackAnalyticsRequest, opts ...grpc.CallOption) (*GetFeedbackAnalyticsResponse, error)
+	// 15A: Calculates the nutrition gap
+	GetNutritionGap(ctx context.Context, in *GetNutritionGapRequest, opts ...grpc.CallOption) (*GetNutritionGapResponse, error)
+	// 15B: Gets food recommendations based on gaps
+	GetRecommendations(ctx context.Context, in *GetRecommendationsRequest, opts ...grpc.CallOption) (*GetRecommendationsResponse, error)
+	// 3C: Analyzes a candidate composite meal for safety, macros, and generates fixes
+	AnalyzeMeal(ctx context.Context, in *AnalyzeMealRequest, opts ...grpc.CallOption) (*AnalyzeMealResponse, error)
 }
 
 type nutritionIntelligenceServiceClient struct {
@@ -59,16 +57,6 @@ type nutritionIntelligenceServiceClient struct {
 
 func NewNutritionIntelligenceServiceClient(cc grpc.ClientConnInterface) NutritionIntelligenceServiceClient {
 	return &nutritionIntelligenceServiceClient{cc}
-}
-
-func (c *nutritionIntelligenceServiceClient) Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(PingResponse)
-	err := c.cc.Invoke(ctx, NutritionIntelligenceService_Ping_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *nutritionIntelligenceServiceClient) HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error) {
@@ -91,30 +79,60 @@ func (c *nutritionIntelligenceServiceClient) AnalyzeFood(ctx context.Context, in
 	return out, nil
 }
 
-func (c *nutritionIntelligenceServiceClient) BatchAnalyzeFoods(ctx context.Context, in *BatchAnalyzeFoodsRequest, opts ...grpc.CallOption) (*BatchAnalyzeFoodsResponse, error) {
+func (c *nutritionIntelligenceServiceClient) GetThresholdSnapshot(ctx context.Context, in *GetThresholdSnapshotRequest, opts ...grpc.CallOption) (*GetThresholdSnapshotResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(BatchAnalyzeFoodsResponse)
-	err := c.cc.Invoke(ctx, NutritionIntelligenceService_BatchAnalyzeFoods_FullMethodName, in, out, cOpts...)
+	out := new(GetThresholdSnapshotResponse)
+	err := c.cc.Invoke(ctx, NutritionIntelligenceService_GetThresholdSnapshot_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *nutritionIntelligenceServiceClient) ExplainFood(ctx context.Context, in *ExplainFoodRequest, opts ...grpc.CallOption) (*ExplainFoodResponse, error) {
+func (c *nutritionIntelligenceServiceClient) SubmitFoodCorrection(ctx context.Context, in *SubmitFoodCorrectionRequest, opts ...grpc.CallOption) (*SubmitFoodCorrectionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ExplainFoodResponse)
-	err := c.cc.Invoke(ctx, NutritionIntelligenceService_ExplainFood_FullMethodName, in, out, cOpts...)
+	out := new(SubmitFoodCorrectionResponse)
+	err := c.cc.Invoke(ctx, NutritionIntelligenceService_SubmitFoodCorrection_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *nutritionIntelligenceServiceClient) RecommendFoods(ctx context.Context, in *RecommendFoodsRequest, opts ...grpc.CallOption) (*RecommendFoodsResponse, error) {
+func (c *nutritionIntelligenceServiceClient) GetFeedbackAnalytics(ctx context.Context, in *GetFeedbackAnalyticsRequest, opts ...grpc.CallOption) (*GetFeedbackAnalyticsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(RecommendFoodsResponse)
-	err := c.cc.Invoke(ctx, NutritionIntelligenceService_RecommendFoods_FullMethodName, in, out, cOpts...)
+	out := new(GetFeedbackAnalyticsResponse)
+	err := c.cc.Invoke(ctx, NutritionIntelligenceService_GetFeedbackAnalytics_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nutritionIntelligenceServiceClient) GetNutritionGap(ctx context.Context, in *GetNutritionGapRequest, opts ...grpc.CallOption) (*GetNutritionGapResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetNutritionGapResponse)
+	err := c.cc.Invoke(ctx, NutritionIntelligenceService_GetNutritionGap_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nutritionIntelligenceServiceClient) GetRecommendations(ctx context.Context, in *GetRecommendationsRequest, opts ...grpc.CallOption) (*GetRecommendationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRecommendationsResponse)
+	err := c.cc.Invoke(ctx, NutritionIntelligenceService_GetRecommendations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nutritionIntelligenceServiceClient) AnalyzeMeal(ctx context.Context, in *AnalyzeMealRequest, opts ...grpc.CallOption) (*AnalyzeMealResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AnalyzeMealResponse)
+	err := c.cc.Invoke(ctx, NutritionIntelligenceService_AnalyzeMeal_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -124,27 +142,23 @@ func (c *nutritionIntelligenceServiceClient) RecommendFoods(ctx context.Context,
 // NutritionIntelligenceServiceServer is the server API for NutritionIntelligenceService service.
 // All implementations must embed UnimplementedNutritionIntelligenceServiceServer
 // for forward compatibility.
-//
-// ═════════════════════════════════════════════════════════════════
-// NutritionIntelligenceService
-//
-// The single public-facing gRPC service that Go Backend calls.
-// Flutter → Go Backend (JWT verify) → gRPC → AI Server → Neo4j
-// ═════════════════════════════════════════════════════════════════
 type NutritionIntelligenceServiceServer interface {
-	Ping(context.Context, *PingRequest) (*PingResponse, error)
-	// Phase 1: Verify AI Server + Neo4j are operational
+	// Basic connectivity and dependency check
 	HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error)
-	// Phase 2: Full food analysis — safety, risks, violations,
-	//
-	//	summary, alternatives — in a single roundtrip
+	// Analyzes a single food for safety and risk
 	AnalyzeFood(context.Context, *AnalyzeFoodRequest) (*AnalyzeFoodResponse, error)
-	// Phase 3: Batch analysis for Diary (Breakfast/Lunch/Dinner/Snack)
-	BatchAnalyzeFoods(context.Context, *BatchAnalyzeFoodsRequest) (*BatchAnalyzeFoodsResponse, error)
-	// Phase 4: Graph-based explanation (user taps "Why?")
-	ExplainFood(context.Context, *ExplainFoodRequest) (*ExplainFoodResponse, error)
-	// Phase 5 (Sprint 12): Recommendation Ranking Engine
-	RecommendFoods(context.Context, *RecommendFoodsRequest) (*RecommendFoodsResponse, error)
+	// Retrieves a snapshot of the dynamically resolved thresholds
+	GetThresholdSnapshot(context.Context, *GetThresholdSnapshotRequest) (*GetThresholdSnapshotResponse, error)
+	// Submits a user correction for an AI food prediction
+	SubmitFoodCorrection(context.Context, *SubmitFoodCorrectionRequest) (*SubmitFoodCorrectionResponse, error)
+	// Retrieves analytics on user feedback and AI corrections
+	GetFeedbackAnalytics(context.Context, *GetFeedbackAnalyticsRequest) (*GetFeedbackAnalyticsResponse, error)
+	// 15A: Calculates the nutrition gap
+	GetNutritionGap(context.Context, *GetNutritionGapRequest) (*GetNutritionGapResponse, error)
+	// 15B: Gets food recommendations based on gaps
+	GetRecommendations(context.Context, *GetRecommendationsRequest) (*GetRecommendationsResponse, error)
+	// 3C: Analyzes a candidate composite meal for safety, macros, and generates fixes
+	AnalyzeMeal(context.Context, *AnalyzeMealRequest) (*AnalyzeMealResponse, error)
 	mustEmbedUnimplementedNutritionIntelligenceServiceServer()
 }
 
@@ -155,23 +169,29 @@ type NutritionIntelligenceServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedNutritionIntelligenceServiceServer struct{}
 
-func (UnimplementedNutritionIntelligenceServiceServer) Ping(context.Context, *PingRequest) (*PingResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Ping not implemented")
-}
 func (UnimplementedNutritionIntelligenceServiceServer) HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method HealthCheck not implemented")
 }
 func (UnimplementedNutritionIntelligenceServiceServer) AnalyzeFood(context.Context, *AnalyzeFoodRequest) (*AnalyzeFoodResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AnalyzeFood not implemented")
 }
-func (UnimplementedNutritionIntelligenceServiceServer) BatchAnalyzeFoods(context.Context, *BatchAnalyzeFoodsRequest) (*BatchAnalyzeFoodsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method BatchAnalyzeFoods not implemented")
+func (UnimplementedNutritionIntelligenceServiceServer) GetThresholdSnapshot(context.Context, *GetThresholdSnapshotRequest) (*GetThresholdSnapshotResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetThresholdSnapshot not implemented")
 }
-func (UnimplementedNutritionIntelligenceServiceServer) ExplainFood(context.Context, *ExplainFoodRequest) (*ExplainFoodResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ExplainFood not implemented")
+func (UnimplementedNutritionIntelligenceServiceServer) SubmitFoodCorrection(context.Context, *SubmitFoodCorrectionRequest) (*SubmitFoodCorrectionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SubmitFoodCorrection not implemented")
 }
-func (UnimplementedNutritionIntelligenceServiceServer) RecommendFoods(context.Context, *RecommendFoodsRequest) (*RecommendFoodsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method RecommendFoods not implemented")
+func (UnimplementedNutritionIntelligenceServiceServer) GetFeedbackAnalytics(context.Context, *GetFeedbackAnalyticsRequest) (*GetFeedbackAnalyticsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetFeedbackAnalytics not implemented")
+}
+func (UnimplementedNutritionIntelligenceServiceServer) GetNutritionGap(context.Context, *GetNutritionGapRequest) (*GetNutritionGapResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetNutritionGap not implemented")
+}
+func (UnimplementedNutritionIntelligenceServiceServer) GetRecommendations(context.Context, *GetRecommendationsRequest) (*GetRecommendationsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetRecommendations not implemented")
+}
+func (UnimplementedNutritionIntelligenceServiceServer) AnalyzeMeal(context.Context, *AnalyzeMealRequest) (*AnalyzeMealResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AnalyzeMeal not implemented")
 }
 func (UnimplementedNutritionIntelligenceServiceServer) mustEmbedUnimplementedNutritionIntelligenceServiceServer() {
 }
@@ -193,24 +213,6 @@ func RegisterNutritionIntelligenceServiceServer(s grpc.ServiceRegistrar, srv Nut
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&NutritionIntelligenceService_ServiceDesc, srv)
-}
-
-func _NutritionIntelligenceService_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PingRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(NutritionIntelligenceServiceServer).Ping(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: NutritionIntelligenceService_Ping_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(NutritionIntelligenceServiceServer).Ping(ctx, req.(*PingRequest))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _NutritionIntelligenceService_HealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -249,56 +251,110 @@ func _NutritionIntelligenceService_AnalyzeFood_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
-func _NutritionIntelligenceService_BatchAnalyzeFoods_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(BatchAnalyzeFoodsRequest)
+func _NutritionIntelligenceService_GetThresholdSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetThresholdSnapshotRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(NutritionIntelligenceServiceServer).BatchAnalyzeFoods(ctx, in)
+		return srv.(NutritionIntelligenceServiceServer).GetThresholdSnapshot(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: NutritionIntelligenceService_BatchAnalyzeFoods_FullMethodName,
+		FullMethod: NutritionIntelligenceService_GetThresholdSnapshot_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(NutritionIntelligenceServiceServer).BatchAnalyzeFoods(ctx, req.(*BatchAnalyzeFoodsRequest))
+		return srv.(NutritionIntelligenceServiceServer).GetThresholdSnapshot(ctx, req.(*GetThresholdSnapshotRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _NutritionIntelligenceService_ExplainFood_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ExplainFoodRequest)
+func _NutritionIntelligenceService_SubmitFoodCorrection_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubmitFoodCorrectionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(NutritionIntelligenceServiceServer).ExplainFood(ctx, in)
+		return srv.(NutritionIntelligenceServiceServer).SubmitFoodCorrection(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: NutritionIntelligenceService_ExplainFood_FullMethodName,
+		FullMethod: NutritionIntelligenceService_SubmitFoodCorrection_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(NutritionIntelligenceServiceServer).ExplainFood(ctx, req.(*ExplainFoodRequest))
+		return srv.(NutritionIntelligenceServiceServer).SubmitFoodCorrection(ctx, req.(*SubmitFoodCorrectionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _NutritionIntelligenceService_RecommendFoods_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RecommendFoodsRequest)
+func _NutritionIntelligenceService_GetFeedbackAnalytics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFeedbackAnalyticsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(NutritionIntelligenceServiceServer).RecommendFoods(ctx, in)
+		return srv.(NutritionIntelligenceServiceServer).GetFeedbackAnalytics(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: NutritionIntelligenceService_RecommendFoods_FullMethodName,
+		FullMethod: NutritionIntelligenceService_GetFeedbackAnalytics_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(NutritionIntelligenceServiceServer).RecommendFoods(ctx, req.(*RecommendFoodsRequest))
+		return srv.(NutritionIntelligenceServiceServer).GetFeedbackAnalytics(ctx, req.(*GetFeedbackAnalyticsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NutritionIntelligenceService_GetNutritionGap_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetNutritionGapRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NutritionIntelligenceServiceServer).GetNutritionGap(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NutritionIntelligenceService_GetNutritionGap_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NutritionIntelligenceServiceServer).GetNutritionGap(ctx, req.(*GetNutritionGapRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NutritionIntelligenceService_GetRecommendations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRecommendationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NutritionIntelligenceServiceServer).GetRecommendations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NutritionIntelligenceService_GetRecommendations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NutritionIntelligenceServiceServer).GetRecommendations(ctx, req.(*GetRecommendationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NutritionIntelligenceService_AnalyzeMeal_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AnalyzeMealRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NutritionIntelligenceServiceServer).AnalyzeMeal(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NutritionIntelligenceService_AnalyzeMeal_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NutritionIntelligenceServiceServer).AnalyzeMeal(ctx, req.(*AnalyzeMealRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -311,10 +367,6 @@ var NutritionIntelligenceService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*NutritionIntelligenceServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Ping",
-			Handler:    _NutritionIntelligenceService_Ping_Handler,
-		},
-		{
 			MethodName: "HealthCheck",
 			Handler:    _NutritionIntelligenceService_HealthCheck_Handler,
 		},
@@ -323,18 +375,30 @@ var NutritionIntelligenceService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NutritionIntelligenceService_AnalyzeFood_Handler,
 		},
 		{
-			MethodName: "BatchAnalyzeFoods",
-			Handler:    _NutritionIntelligenceService_BatchAnalyzeFoods_Handler,
+			MethodName: "GetThresholdSnapshot",
+			Handler:    _NutritionIntelligenceService_GetThresholdSnapshot_Handler,
 		},
 		{
-			MethodName: "ExplainFood",
-			Handler:    _NutritionIntelligenceService_ExplainFood_Handler,
+			MethodName: "SubmitFoodCorrection",
+			Handler:    _NutritionIntelligenceService_SubmitFoodCorrection_Handler,
 		},
 		{
-			MethodName: "RecommendFoods",
-			Handler:    _NutritionIntelligenceService_RecommendFoods_Handler,
+			MethodName: "GetFeedbackAnalytics",
+			Handler:    _NutritionIntelligenceService_GetFeedbackAnalytics_Handler,
+		},
+		{
+			MethodName: "GetNutritionGap",
+			Handler:    _NutritionIntelligenceService_GetNutritionGap_Handler,
+		},
+		{
+			MethodName: "GetRecommendations",
+			Handler:    _NutritionIntelligenceService_GetRecommendations_Handler,
+		},
+		{
+			MethodName: "AnalyzeMeal",
+			Handler:    _NutritionIntelligenceService_AnalyzeMeal_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "nutrition_intelligence.proto",
+	Metadata: "v1/nutrition_intelligence.proto",
 }

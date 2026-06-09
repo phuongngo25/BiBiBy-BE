@@ -42,9 +42,50 @@ func NewNutritionHandler(rg *gin.RouterGroup, uc domain.NutritionUseCase) {
 	rg.GET("/nutrition/analytics/monthly", h.GetMonthlyAnalytics)
 	rg.GET("/nutrition/analytics/streak", h.GetStreak)
 	rg.PUT("/nutrition/logs/:id", h.UpdateFoodLog)
-	
+
 	// Orchestrator Job Status API
 	rg.GET("/jobs/:id", h.GetJobStatus)
+
+	// Explainability API (Sprint 2) - Removed (Deprecated in AI Server v1)
+
+	// Optimizer API (Sprint 4)
+	rg.POST("/nutrition/recommendations", h.GetRecommendations)
+
+	// Thresholds & Feedback API (Migration Epic 1)
+	rg.GET("/nutrition/thresholds", h.GetThresholds)
+	rg.POST("/nutrition/feedback/correction", h.SubmitFoodCorrection)
+	rg.POST("/nutrition/feedback/acceptance", h.SubmitFoodAcceptance)
+	rg.POST("/nutrition/feedback/viewed", h.SubmitFoodViewed)
+	rg.POST("/nutrition/meal/validate", h.ValidateMeal)
+
+	// Planner API
+	rg.POST("/planner/reoptimize", h.PlannerReoptimize)
+	rg.POST("/planner/explain", h.PlannerExplain)
+	rg.POST("/planner/weekly-plan", h.GenerateWeeklyPlan)
+}
+
+// GetRecommendations godoc
+// POST /api/v1/nutrition/recommendations
+func (h *NutritionHandler) GetRecommendations(c *gin.Context) {
+	userIDStr := middleware.GetUserID(c)
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID in token"})
+		return
+	}
+
+	var req domain.GetRecommendationsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	recommendations, err := h.uc.GetRecommendations(c.Request.Context(), userID, &req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, recommendations)
 }
 
 // SearchFoods godoc
@@ -68,10 +109,10 @@ func (h *NutritionHandler) SearchFoods(c *gin.Context) {
 // SearchSpoonacular godoc
 // GET /api/v1/nutrition/search-spoonacular?q=&diet=&intolerances=&maxCarbs=
 func (h *NutritionHandler) SearchSpoonacular(c *gin.Context) {
-	query        := c.Query("q")
-	diet         := c.Query("diet")
+	query := c.Query("q")
+	diet := c.Query("diet")
 	intolerances := c.Query("intolerances")
-	maxCarbs, _  := strconv.Atoi(c.Query("maxCarbs"))
+	maxCarbs, _ := strconv.Atoi(c.Query("maxCarbs"))
 
 	if query == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "query param 'q' is required"})
@@ -89,8 +130,8 @@ func (h *NutritionHandler) SearchSpoonacular(c *gin.Context) {
 // SearchByNutrients godoc
 // GET /api/v1/nutrition/search-by-nutrients?minProtein=&maxFat=&minCalories=&maxCalories=
 func (h *NutritionHandler) SearchByNutrients(c *gin.Context) {
-	minProtein,  _ := strconv.ParseFloat(c.Query("minProtein"),  64)
-	maxFat,      _ := strconv.ParseFloat(c.Query("maxFat"),      64)
+	minProtein, _ := strconv.ParseFloat(c.Query("minProtein"), 64)
+	maxFat, _ := strconv.ParseFloat(c.Query("maxFat"), 64)
 	minCalories, _ := strconv.ParseFloat(c.Query("minCalories"), 64)
 	maxCalories, _ := strconv.ParseFloat(c.Query("maxCalories"), 64)
 
@@ -224,7 +265,6 @@ func (h *NutritionHandler) GetDailyPlan(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, plan)
 }
-
 
 // UploadFoodImage godoc
 // POST /api/v1/nutrition/foods/upload-image
@@ -426,7 +466,7 @@ func (h *NutritionHandler) GetJobStatus(c *gin.Context) {
 		"done":       job.Done,
 		"updated_at": job.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"), // Strict RFC3339
 	}
-	
+
 	if job.Error != "" {
 		response["error"] = job.Error
 	}
@@ -462,4 +502,158 @@ func (h *NutritionHandler) EstimateNutrition(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+// GetThresholds godoc
+func (h *NutritionHandler) GetThresholds(c *gin.Context) {
+	userIDStr := middleware.GetUserID(c)
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID in token"})
+		return
+	}
+
+	snapshot, err := h.uc.GetThresholdSnapshot(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, snapshot)
+}
+
+func (h *NutritionHandler) handleFeedback(c *gin.Context, action string) {
+	userIDStr := middleware.GetUserID(c)
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID in token"})
+		return
+	}
+
+	var req domain.FoodFeedbackRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate UserAction (T-B4)
+	if req.UserAction != "" && req.UserAction != action {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user action in payload"})
+		return
+	}
+	req.UserAction = action
+
+	err = h.uc.SubmitFoodFeedback(c.Request.Context(), userID, &req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// SubmitFoodCorrection godoc
+func (h *NutritionHandler) SubmitFoodCorrection(c *gin.Context) {
+	h.handleFeedback(c, "CORRECTION")
+}
+
+// SubmitFoodAcceptance godoc
+func (h *NutritionHandler) SubmitFoodAcceptance(c *gin.Context) {
+	h.handleFeedback(c, "ACCEPTANCE")
+}
+
+// SubmitFoodViewed godoc
+func (h *NutritionHandler) SubmitFoodViewed(c *gin.Context) {
+	h.handleFeedback(c, "VIEWED")
+}
+
+// PlannerReoptimize godoc
+// POST /api/v1/planner/reoptimize
+func (h *NutritionHandler) PlannerReoptimize(c *gin.Context) {
+	userIDStr := middleware.GetUserID(c)
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID in token"})
+		return
+	}
+
+	var req domain.ReoptimizeWeeklyPlanRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	resp, err := h.uc.ReoptimizePlan(c.Request.Context(), userID, &req)
+	if err != nil {
+		if errors.Is(err, domain.ErrAllCandidatesRejected) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.WeeklyPlanResponseDTO)
+}
+
+// PlannerExplain godoc
+func (h *NutritionHandler) PlannerExplain(c *gin.Context) {
+	h.validateMeal(c)
+}
+
+// ValidateMeal godoc
+// POST /api/v1/nutrition/meal/validate
+func (h *NutritionHandler) ValidateMeal(c *gin.Context) {
+	h.validateMeal(c)
+}
+
+func (h *NutritionHandler) validateMeal(c *gin.Context) {
+	userIDStr := middleware.GetUserID(c)
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID in token"})
+		return
+	}
+
+	var req domain.AnalyzeMealRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp, err := h.uc.AnalyzeMeal(c.Request.Context(), userID, &req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+// GenerateWeeklyPlan godoc
+// POST /api/v1/planner/weekly-plan
+func (h *NutritionHandler) GenerateWeeklyPlan(c *gin.Context) {
+	userIDStr := middleware.GetUserID(c)
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID in token"})
+		return
+	}
+
+	var req domain.GenerateWeeklyPlanRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	resp, err := h.uc.GenerateWeeklyPlan(c.Request.Context(), userID, &req)
+	if err != nil {
+		if errors.Is(err, domain.ErrAllCandidatesRejected) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.WeeklyPlanResponseDTO)
 }

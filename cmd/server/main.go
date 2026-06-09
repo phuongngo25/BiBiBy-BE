@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -17,11 +19,12 @@ import (
 	"nutrix-backend/pkg/middleware"
 	"nutrix-backend/pkg/spoonacular"
 
+	"nutrix-backend/internal/infrastructure"
+	"nutrix-backend/internal/infrastructure/metrics"
 	nutritionDelivery "nutrix-backend/internal/nutrition/delivery"
 	nutritionRepo "nutrix-backend/internal/nutrition/repository"
 	nutritionSvc "nutrix-backend/internal/nutrition/service"
 	nutritionUC "nutrix-backend/internal/nutrition/usecase"
-	"nutrix-backend/internal/infrastructure"
 
 	userDelivery "nutrix-backend/internal/user/delivery"
 	userRepo "nutrix-backend/internal/user/repository"
@@ -29,8 +32,8 @@ import (
 
 	workoutDelivery "nutrix-backend/internal/workout/delivery"
 	workoutRepo "nutrix-backend/internal/workout/repository"
-	workoutUC "nutrix-backend/internal/workout/usecase"
 	workoutSeeder "nutrix-backend/internal/workout/seeder"
+	workoutUC "nutrix-backend/internal/workout/usecase"
 	"nutrix-backend/pkg/rapidapi"
 )
 
@@ -84,7 +87,7 @@ func main() {
 					// If we were in degraded/fail-open state, check if Redis is back
 					if err := redisClient.Ping(ctx).Err(); err == nil {
 						// Note: Ideally the breaker has a Reset() method
-						// We'll trust the breaker's internal HalfOpen probe, 
+						// We'll trust the breaker's internal HalfOpen probe,
 						// but this is an extra layer of proactive recovery.
 					}
 				}
@@ -107,9 +110,14 @@ func main() {
 	// -------------------------------------------------------------------------
 	spoonClient := spoonacular.NewClient(cfg.SpoonacularAPIKey)
 	exerciseClient := rapidapi.NewExerciseClient(cfg.RapidAPIKey)
-	aiClient, aiErr := infrastructure.NewGrpcAIClient("localhost:50051")
-	if aiErr != nil {
-		log.Printf("[SRE] AI Client unavailable: %v", aiErr)
+	kgTarget, cvTarget := resolveInternalServiceTargets(cfg)
+	kgClient, kgErr := infrastructure.NewGrpcNutritionClient(kgTarget)
+	if kgErr != nil {
+		log.Printf("[SRE] KG Client unavailable: %v", kgErr)
+	}
+	cvClient, cvErr := infrastructure.NewGrpcAIClient(cvTarget)
+	if cvErr != nil {
+		log.Printf("[SRE] CV Client unavailable: %v", cvErr)
 	}
 
 	// -------------------------------------------------------------------------
@@ -121,7 +129,7 @@ func main() {
 	// -------------------------------------------------------------------------
 	// 5. DEPENDENCY INJECTION — UseCases
 	// -------------------------------------------------------------------------
-	nutritionUCInst := nutritionUC.NewNutritionUseCase(nutritionRepoInst, streakRepoInst, achievementRepoInst, spoonClient, workoutRepoInst, uRepo, aiClient)
+	nutritionUCInst := nutritionUC.NewNutritionUseCase(nutritionRepoInst, streakRepoInst, achievementRepoInst, spoonClient, workoutRepoInst, uRepo, cvClient, kgClient, redisClient)
 	uUC := userUC.NewUserUseCase(uRepo, driRepoInst, nutritionRepoInst, workoutRepoInst, cfg.JWTSecret, cfg.JWTExpirationHours)
 	workoutUCInst := workoutUC.NewWorkoutUseCase(workoutRepoInst, exerciseClient, uRepo, streakSvc)
 
@@ -134,6 +142,10 @@ func main() {
 	// -------------------------------------------------------------------------
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.Use(metrics.PrometheusMiddleware()) // Inject Global Observability Middleware
+
+	// Expose Prometheus endpoint
+	r.GET("/metrics", metrics.PrometheusHandler())
 
 	// ==========================
 	// TRUSTED PROXIES (CRITICAL)
@@ -170,11 +182,10 @@ func main() {
 			"X-Requested-With",
 		},
 		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: false, // set true if/when cookie-based auth is added
+		AllowCredentials: false,        // set true if/when cookie-based auth is added
 		MaxAge:           12 * 60 * 60, // 12 h — browsers cache preflight for this long
 	}
 	r.Use(cors.New(corsConfig))
-
 
 	// ─── Global Security Middleware Stack (ordered: drop bad traffic ASAP) ───
 	// 2. RequireHTTPS — block cleartext transport immediately (prod only)
@@ -217,7 +228,7 @@ func main() {
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           r,
-		ReadHeaderTimeout: 5 * time.Second,  // anti-slowloris
+		ReadHeaderTimeout: 5 * time.Second, // anti-slowloris
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       120 * time.Second,
@@ -262,4 +273,25 @@ func main() {
 	// Explicitly stop background goroutines (RateLimiter cleanup, etc.)
 	cancel()
 	log.Println("[Server] Shutdown complete. Goodbye!")
+}
+
+func resolveInternalServiceTargets(cfg *config.Config) (string, string) {
+	kgHost := cfg.GRPCAIHost
+	kgPort := cfg.GRPCAIPort
+	kgTarget := fmt.Sprintf("%s:%s", kgHost, kgPort)
+
+	cvHost := os.Getenv("GRPC_CV_HOST")
+	if cvHost == "" {
+		cvHost = kgHost
+	}
+
+	cvPort := os.Getenv("GRPC_CV_PORT")
+	if cvPort == "" {
+		cvPort = "50052"
+		if parsedPort, err := strconv.Atoi(kgPort); err == nil {
+			cvPort = strconv.Itoa(parsedPort + 1)
+		}
+	}
+
+	return kgTarget, fmt.Sprintf("%s:%s", cvHost, cvPort)
 }

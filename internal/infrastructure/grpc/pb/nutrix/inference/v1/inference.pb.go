@@ -21,10 +21,253 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type RiskLevel int32
+
+const (
+	RiskLevel_RISK_UNKNOWN  RiskLevel = 0
+	RiskLevel_RISK_SAFE     RiskLevel = 1
+	RiskLevel_RISK_WARNING  RiskLevel = 2
+	RiskLevel_RISK_CRITICAL RiskLevel = 3
+)
+
+// Enum value maps for RiskLevel.
+var (
+	RiskLevel_name = map[int32]string{
+		0: "RISK_UNKNOWN",
+		1: "RISK_SAFE",
+		2: "RISK_WARNING",
+		3: "RISK_CRITICAL",
+	}
+	RiskLevel_value = map[string]int32{
+		"RISK_UNKNOWN":  0,
+		"RISK_SAFE":     1,
+		"RISK_WARNING":  2,
+		"RISK_CRITICAL": 3,
+	}
+)
+
+func (x RiskLevel) Enum() *RiskLevel {
+	p := new(RiskLevel)
+	*p = x
+	return p
+}
+
+func (x RiskLevel) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RiskLevel) Descriptor() protoreflect.EnumDescriptor {
+	return file_inference_proto_enumTypes[0].Descriptor()
+}
+
+func (RiskLevel) Type() protoreflect.EnumType {
+	return &file_inference_proto_enumTypes[0]
+}
+
+func (x RiskLevel) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RiskLevel.Descriptor instead.
+func (RiskLevel) EnumDescriptor() ([]byte, []int) {
+	return file_inference_proto_rawDescGZIP(), []int{0}
+}
+
+type CreateUploadSessionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateUploadSessionRequest) Reset() {
+	*x = CreateUploadSessionRequest{}
+	mi := &file_inference_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateUploadSessionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateUploadSessionRequest) ProtoMessage() {}
+
+func (x *CreateUploadSessionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_inference_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateUploadSessionRequest.ProtoReflect.Descriptor instead.
+func (*CreateUploadSessionRequest) Descriptor() ([]byte, []int) {
+	return file_inference_proto_rawDescGZIP(), []int{0}
+}
+
+type CreateUploadSessionResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	UploadSessionId string                 `protobuf:"bytes,1,opt,name=upload_session_id,json=uploadSessionId,proto3" json:"upload_session_id,omitempty"`
+	PresignedUrl    string                 `protobuf:"bytes,2,opt,name=presigned_url,json=presignedUrl,proto3" json:"presigned_url,omitempty"`
+	ExpiresAt       int64                  `protobuf:"varint,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *CreateUploadSessionResponse) Reset() {
+	*x = CreateUploadSessionResponse{}
+	mi := &file_inference_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateUploadSessionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateUploadSessionResponse) ProtoMessage() {}
+
+func (x *CreateUploadSessionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_inference_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateUploadSessionResponse.ProtoReflect.Descriptor instead.
+func (*CreateUploadSessionResponse) Descriptor() ([]byte, []int) {
+	return file_inference_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *CreateUploadSessionResponse) GetUploadSessionId() string {
+	if x != nil {
+		return x.UploadSessionId
+	}
+	return ""
+}
+
+func (x *CreateUploadSessionResponse) GetPresignedUrl() string {
+	if x != nil {
+		return x.PresignedUrl
+	}
+	return ""
+}
+
+func (x *CreateUploadSessionResponse) GetExpiresAt() int64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+type ConfirmUploadRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	UploadSessionId string                 `protobuf:"bytes,1,opt,name=upload_session_id,json=uploadSessionId,proto3" json:"upload_session_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ConfirmUploadRequest) Reset() {
+	*x = ConfirmUploadRequest{}
+	mi := &file_inference_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmUploadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmUploadRequest) ProtoMessage() {}
+
+func (x *ConfirmUploadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_inference_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmUploadRequest.ProtoReflect.Descriptor instead.
+func (*ConfirmUploadRequest) Descriptor() ([]byte, []int) {
+	return file_inference_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ConfirmUploadRequest) GetUploadSessionId() string {
+	if x != nil {
+		return x.UploadSessionId
+	}
+	return ""
+}
+
+type ConfirmUploadResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	UploadSessionId string                 `protobuf:"bytes,1,opt,name=upload_session_id,json=uploadSessionId,proto3" json:"upload_session_id,omitempty"`
+	Success         bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ConfirmUploadResponse) Reset() {
+	*x = ConfirmUploadResponse{}
+	mi := &file_inference_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmUploadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmUploadResponse) ProtoMessage() {}
+
+func (x *ConfirmUploadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_inference_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmUploadResponse.ProtoReflect.Descriptor instead.
+func (*ConfirmUploadResponse) Descriptor() ([]byte, []int) {
+	return file_inference_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ConfirmUploadResponse) GetUploadSessionId() string {
+	if x != nil {
+		return x.UploadSessionId
+	}
+	return ""
+}
+
+func (x *ConfirmUploadResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
 type AnalyzeMealImageRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Raw image bytes (JPEG/PNG). Do NOT Base64-encode.
-	ImageData []byte `protobuf:"bytes,1,opt,name=image_data,json=imageData,proto3" json:"image_data,omitempty"`
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	UploadSessionId string                 `protobuf:"bytes,1,opt,name=upload_session_id,json=uploadSessionId,proto3" json:"upload_session_id,omitempty"`
 	// Optional user context for KG reasoning (e.g. "diabetes", "hypertension")
 	UserDiseases  []string `protobuf:"bytes,2,rep,name=user_diseases,json=userDiseases,proto3" json:"user_diseases,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -33,7 +276,7 @@ type AnalyzeMealImageRequest struct {
 
 func (x *AnalyzeMealImageRequest) Reset() {
 	*x = AnalyzeMealImageRequest{}
-	mi := &file_inference_proto_msgTypes[0]
+	mi := &file_inference_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45,7 +288,7 @@ func (x *AnalyzeMealImageRequest) String() string {
 func (*AnalyzeMealImageRequest) ProtoMessage() {}
 
 func (x *AnalyzeMealImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_inference_proto_msgTypes[0]
+	mi := &file_inference_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -58,14 +301,14 @@ func (x *AnalyzeMealImageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnalyzeMealImageRequest.ProtoReflect.Descriptor instead.
 func (*AnalyzeMealImageRequest) Descriptor() ([]byte, []int) {
-	return file_inference_proto_rawDescGZIP(), []int{0}
+	return file_inference_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *AnalyzeMealImageRequest) GetImageData() []byte {
+func (x *AnalyzeMealImageRequest) GetUploadSessionId() string {
 	if x != nil {
-		return x.ImageData
+		return x.UploadSessionId
 	}
-	return nil
+	return ""
 }
 
 func (x *AnalyzeMealImageRequest) GetUserDiseases() []string {
@@ -86,20 +329,20 @@ type AnalyzeMealImageResponse struct {
 	// Knowledge Graph / Enrichment Output
 	Ingredients     []string          `protobuf:"bytes,6,rep,name=ingredients,proto3" json:"ingredients,omitempty"`
 	Safe            bool              `protobuf:"varint,7,opt,name=safe,proto3" json:"safe,omitempty"`
-	RiskLevel       string            `protobuf:"bytes,8,opt,name=risk_level,json=riskLevel,proto3" json:"risk_level,omitempty"`
+	RiskLevel       RiskLevel         `protobuf:"varint,8,opt,name=risk_level,json=riskLevel,proto3,enum=nutrix.inference.RiskLevel" json:"risk_level,omitempty"`
 	Violations      []*Violation      `protobuf:"bytes,9,rep,name=violations,proto3" json:"violations,omitempty"`
 	Recommendations []*Recommendation `protobuf:"bytes,10,rep,name=recommendations,proto3" json:"recommendations,omitempty"`
 	// Observability
 	LatencyMs float32 `protobuf:"fixed32,11,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
 	// Reasoning
-	EvidencePaths []string `protobuf:"bytes,12,rep,name=evidence_paths,json=evidencePaths,proto3" json:"evidence_paths,omitempty"`
+	EvidencePaths []*EvidencePath `protobuf:"bytes,12,rep,name=evidence_paths,json=evidencePaths,proto3" json:"evidence_paths,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AnalyzeMealImageResponse) Reset() {
 	*x = AnalyzeMealImageResponse{}
-	mi := &file_inference_proto_msgTypes[1]
+	mi := &file_inference_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -111,7 +354,7 @@ func (x *AnalyzeMealImageResponse) String() string {
 func (*AnalyzeMealImageResponse) ProtoMessage() {}
 
 func (x *AnalyzeMealImageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_inference_proto_msgTypes[1]
+	mi := &file_inference_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -124,7 +367,7 @@ func (x *AnalyzeMealImageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnalyzeMealImageResponse.ProtoReflect.Descriptor instead.
 func (*AnalyzeMealImageResponse) Descriptor() ([]byte, []int) {
-	return file_inference_proto_rawDescGZIP(), []int{1}
+	return file_inference_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *AnalyzeMealImageResponse) GetRequestId() string {
@@ -176,11 +419,11 @@ func (x *AnalyzeMealImageResponse) GetSafe() bool {
 	return false
 }
 
-func (x *AnalyzeMealImageResponse) GetRiskLevel() string {
+func (x *AnalyzeMealImageResponse) GetRiskLevel() RiskLevel {
 	if x != nil {
 		return x.RiskLevel
 	}
-	return ""
+	return RiskLevel_RISK_UNKNOWN
 }
 
 func (x *AnalyzeMealImageResponse) GetViolations() []*Violation {
@@ -204,9 +447,53 @@ func (x *AnalyzeMealImageResponse) GetLatencyMs() float32 {
 	return 0
 }
 
-func (x *AnalyzeMealImageResponse) GetEvidencePaths() []string {
+func (x *AnalyzeMealImageResponse) GetEvidencePaths() []*EvidencePath {
 	if x != nil {
 		return x.EvidencePaths
+	}
+	return nil
+}
+
+type EvidencePath struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Nodes         []string               `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EvidencePath) Reset() {
+	*x = EvidencePath{}
+	mi := &file_inference_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EvidencePath) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EvidencePath) ProtoMessage() {}
+
+func (x *EvidencePath) ProtoReflect() protoreflect.Message {
+	mi := &file_inference_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EvidencePath.ProtoReflect.Descriptor instead.
+func (*EvidencePath) Descriptor() ([]byte, []int) {
+	return file_inference_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *EvidencePath) GetNodes() []string {
+	if x != nil {
+		return x.Nodes
 	}
 	return nil
 }
@@ -223,7 +510,7 @@ type Violation struct {
 
 func (x *Violation) Reset() {
 	*x = Violation{}
-	mi := &file_inference_proto_msgTypes[2]
+	mi := &file_inference_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -235,7 +522,7 @@ func (x *Violation) String() string {
 func (*Violation) ProtoMessage() {}
 
 func (x *Violation) ProtoReflect() protoreflect.Message {
-	mi := &file_inference_proto_msgTypes[2]
+	mi := &file_inference_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -248,7 +535,7 @@ func (x *Violation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Violation.ProtoReflect.Descriptor instead.
 func (*Violation) Descriptor() ([]byte, []int) {
-	return file_inference_proto_rawDescGZIP(), []int{2}
+	return file_inference_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Violation) GetDiseaseId() string {
@@ -291,7 +578,7 @@ type Recommendation struct {
 
 func (x *Recommendation) Reset() {
 	*x = Recommendation{}
-	mi := &file_inference_proto_msgTypes[3]
+	mi := &file_inference_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -303,7 +590,7 @@ func (x *Recommendation) String() string {
 func (*Recommendation) ProtoMessage() {}
 
 func (x *Recommendation) ProtoReflect() protoreflect.Message {
-	mi := &file_inference_proto_msgTypes[3]
+	mi := &file_inference_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -316,7 +603,7 @@ func (x *Recommendation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Recommendation.ProtoReflect.Descriptor instead.
 func (*Recommendation) Descriptor() ([]byte, []int) {
-	return file_inference_proto_rawDescGZIP(), []int{3}
+	return file_inference_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Recommendation) GetFoodId() string {
@@ -358,7 +645,7 @@ type EstimateVolumeRequest struct {
 
 func (x *EstimateVolumeRequest) Reset() {
 	*x = EstimateVolumeRequest{}
-	mi := &file_inference_proto_msgTypes[4]
+	mi := &file_inference_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -370,7 +657,7 @@ func (x *EstimateVolumeRequest) String() string {
 func (*EstimateVolumeRequest) ProtoMessage() {}
 
 func (x *EstimateVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_inference_proto_msgTypes[4]
+	mi := &file_inference_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -383,7 +670,7 @@ func (x *EstimateVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EstimateVolumeRequest.ProtoReflect.Descriptor instead.
 func (*EstimateVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_inference_proto_rawDescGZIP(), []int{4}
+	return file_inference_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *EstimateVolumeRequest) GetImageData() []byte {
@@ -426,7 +713,7 @@ type EstimateVolumeResponse struct {
 
 func (x *EstimateVolumeResponse) Reset() {
 	*x = EstimateVolumeResponse{}
-	mi := &file_inference_proto_msgTypes[5]
+	mi := &file_inference_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -438,7 +725,7 @@ func (x *EstimateVolumeResponse) String() string {
 func (*EstimateVolumeResponse) ProtoMessage() {}
 
 func (x *EstimateVolumeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_inference_proto_msgTypes[5]
+	mi := &file_inference_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -451,7 +738,7 @@ func (x *EstimateVolumeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EstimateVolumeResponse.ProtoReflect.Descriptor instead.
 func (*EstimateVolumeResponse) Descriptor() ([]byte, []int) {
-	return file_inference_proto_rawDescGZIP(), []int{5}
+	return file_inference_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *EstimateVolumeResponse) GetRequestId() string {
@@ -556,11 +843,21 @@ var File_inference_proto protoreflect.FileDescriptor
 
 const file_inference_proto_rawDesc = "" +
 	"\n" +
-	"\x0finference.proto\x12\x10nutrix.inference\"]\n" +
-	"\x17AnalyzeMealImageRequest\x12\x1d\n" +
+	"\x0finference.proto\x12\x10nutrix.inference\"\x1c\n" +
+	"\x1aCreateUploadSessionRequest\"\x8d\x01\n" +
+	"\x1bCreateUploadSessionResponse\x12*\n" +
+	"\x11upload_session_id\x18\x01 \x01(\tR\x0fuploadSessionId\x12#\n" +
+	"\rpresigned_url\x18\x02 \x01(\tR\fpresignedUrl\x12\x1d\n" +
 	"\n" +
-	"image_data\x18\x01 \x01(\fR\timageData\x12#\n" +
-	"\ruser_diseases\x18\x02 \x03(\tR\fuserDiseases\"\xe6\x03\n" +
+	"expires_at\x18\x03 \x01(\x03R\texpiresAt\"B\n" +
+	"\x14ConfirmUploadRequest\x12*\n" +
+	"\x11upload_session_id\x18\x01 \x01(\tR\x0fuploadSessionId\"]\n" +
+	"\x15ConfirmUploadResponse\x12*\n" +
+	"\x11upload_session_id\x18\x01 \x01(\tR\x0fuploadSessionId\x12\x18\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess\"j\n" +
+	"\x17AnalyzeMealImageRequest\x12*\n" +
+	"\x11upload_session_id\x18\x01 \x01(\tR\x0fuploadSessionId\x12#\n" +
+	"\ruser_diseases\x18\x02 \x03(\tR\fuserDiseases\"\xa3\x04\n" +
 	"\x18AnalyzeMealImageResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1d\n" +
@@ -571,17 +868,19 @@ const file_inference_proto_rawDesc = "" +
 	"volume_cm3\x18\x04 \x01(\x02R\tvolumeCm3\x12\x15\n" +
 	"\x06mass_g\x18\x05 \x01(\x02R\x05massG\x12 \n" +
 	"\vingredients\x18\x06 \x03(\tR\vingredients\x12\x12\n" +
-	"\x04safe\x18\a \x01(\bR\x04safe\x12\x1d\n" +
+	"\x04safe\x18\a \x01(\bR\x04safe\x12:\n" +
 	"\n" +
-	"risk_level\x18\b \x01(\tR\triskLevel\x12;\n" +
+	"risk_level\x18\b \x01(\x0e2\x1b.nutrix.inference.RiskLevelR\triskLevel\x12;\n" +
 	"\n" +
 	"violations\x18\t \x03(\v2\x1b.nutrix.inference.ViolationR\n" +
 	"violations\x12J\n" +
 	"\x0frecommendations\x18\n" +
 	" \x03(\v2 .nutrix.inference.RecommendationR\x0frecommendations\x12\x1d\n" +
 	"\n" +
-	"latency_ms\x18\v \x01(\x02R\tlatencyMs\x12%\n" +
-	"\x0eevidence_paths\x18\f \x03(\tR\revidencePaths\"\x8b\x01\n" +
+	"latency_ms\x18\v \x01(\x02R\tlatencyMs\x12E\n" +
+	"\x0eevidence_paths\x18\f \x03(\v2\x1e.nutrix.inference.EvidencePathR\revidencePaths\"$\n" +
+	"\fEvidencePath\x12\x14\n" +
+	"\x05nodes\x18\x01 \x03(\tR\x05nodes\"\x8b\x01\n" +
 	"\tViolation\x12\x1d\n" +
 	"\n" +
 	"disease_id\x18\x01 \x01(\tR\tdiseaseId\x12!\n" +
@@ -616,9 +915,16 @@ const file_inference_proto_rawDesc = "" +
 	"\x0edensity_source\x18\v \x01(\tR\rdensitySource\x12-\n" +
 	"\x12classifier_version\x18\f \x01(\tR\x11classifierVersion\x12%\n" +
 	"\x0evolume_version\x18\r \x01(\tR\rvolumeVersion\x12'\n" +
-	"\x0fdensity_version\x18\x0e \x01(\tR\x0edensityVersion2\xe2\x01\n" +
+	"\x0fdensity_version\x18\x0e \x01(\tR\x0edensityVersion*Q\n" +
+	"\tRiskLevel\x12\x10\n" +
+	"\fRISK_UNKNOWN\x10\x00\x12\r\n" +
+	"\tRISK_SAFE\x10\x01\x12\x10\n" +
+	"\fRISK_WARNING\x10\x02\x12\x11\n" +
+	"\rRISK_CRITICAL\x10\x032\xb8\x03\n" +
 	"\x10InferenceService\x12c\n" +
-	"\x0eEstimateVolume\x12'.nutrix.inference.EstimateVolumeRequest\x1a(.nutrix.inference.EstimateVolumeResponse\x12i\n" +
+	"\x0eEstimateVolume\x12'.nutrix.inference.EstimateVolumeRequest\x1a(.nutrix.inference.EstimateVolumeResponse\x12r\n" +
+	"\x13CreateUploadSession\x12,.nutrix.inference.CreateUploadSessionRequest\x1a-.nutrix.inference.CreateUploadSessionResponse\x12`\n" +
+	"\rConfirmUpload\x12&.nutrix.inference.ConfirmUploadRequest\x1a'.nutrix.inference.ConfirmUploadResponse\x12i\n" +
 	"\x10AnalyzeMealImage\x12).nutrix.inference.AnalyzeMealImageRequest\x1a*.nutrix.inference.AnalyzeMealImageResponseB!Z\x1fnutrix/inference/v1;inferencev1b\x06proto3"
 
 var (
@@ -633,27 +939,40 @@ func file_inference_proto_rawDescGZIP() []byte {
 	return file_inference_proto_rawDescData
 }
 
-var file_inference_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_inference_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_inference_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_inference_proto_goTypes = []any{
-	(*AnalyzeMealImageRequest)(nil),  // 0: nutrix.inference.AnalyzeMealImageRequest
-	(*AnalyzeMealImageResponse)(nil), // 1: nutrix.inference.AnalyzeMealImageResponse
-	(*Violation)(nil),                // 2: nutrix.inference.Violation
-	(*Recommendation)(nil),           // 3: nutrix.inference.Recommendation
-	(*EstimateVolumeRequest)(nil),    // 4: nutrix.inference.EstimateVolumeRequest
-	(*EstimateVolumeResponse)(nil),   // 5: nutrix.inference.EstimateVolumeResponse
+	(RiskLevel)(0),                      // 0: nutrix.inference.RiskLevel
+	(*CreateUploadSessionRequest)(nil),  // 1: nutrix.inference.CreateUploadSessionRequest
+	(*CreateUploadSessionResponse)(nil), // 2: nutrix.inference.CreateUploadSessionResponse
+	(*ConfirmUploadRequest)(nil),        // 3: nutrix.inference.ConfirmUploadRequest
+	(*ConfirmUploadResponse)(nil),       // 4: nutrix.inference.ConfirmUploadResponse
+	(*AnalyzeMealImageRequest)(nil),     // 5: nutrix.inference.AnalyzeMealImageRequest
+	(*AnalyzeMealImageResponse)(nil),    // 6: nutrix.inference.AnalyzeMealImageResponse
+	(*EvidencePath)(nil),                // 7: nutrix.inference.EvidencePath
+	(*Violation)(nil),                   // 8: nutrix.inference.Violation
+	(*Recommendation)(nil),              // 9: nutrix.inference.Recommendation
+	(*EstimateVolumeRequest)(nil),       // 10: nutrix.inference.EstimateVolumeRequest
+	(*EstimateVolumeResponse)(nil),      // 11: nutrix.inference.EstimateVolumeResponse
 }
 var file_inference_proto_depIdxs = []int32{
-	2, // 0: nutrix.inference.AnalyzeMealImageResponse.violations:type_name -> nutrix.inference.Violation
-	3, // 1: nutrix.inference.AnalyzeMealImageResponse.recommendations:type_name -> nutrix.inference.Recommendation
-	4, // 2: nutrix.inference.InferenceService.EstimateVolume:input_type -> nutrix.inference.EstimateVolumeRequest
-	0, // 3: nutrix.inference.InferenceService.AnalyzeMealImage:input_type -> nutrix.inference.AnalyzeMealImageRequest
-	5, // 4: nutrix.inference.InferenceService.EstimateVolume:output_type -> nutrix.inference.EstimateVolumeResponse
-	1, // 5: nutrix.inference.InferenceService.AnalyzeMealImage:output_type -> nutrix.inference.AnalyzeMealImageResponse
-	4, // [4:6] is the sub-list for method output_type
-	2, // [2:4] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	0,  // 0: nutrix.inference.AnalyzeMealImageResponse.risk_level:type_name -> nutrix.inference.RiskLevel
+	8,  // 1: nutrix.inference.AnalyzeMealImageResponse.violations:type_name -> nutrix.inference.Violation
+	9,  // 2: nutrix.inference.AnalyzeMealImageResponse.recommendations:type_name -> nutrix.inference.Recommendation
+	7,  // 3: nutrix.inference.AnalyzeMealImageResponse.evidence_paths:type_name -> nutrix.inference.EvidencePath
+	10, // 4: nutrix.inference.InferenceService.EstimateVolume:input_type -> nutrix.inference.EstimateVolumeRequest
+	1,  // 5: nutrix.inference.InferenceService.CreateUploadSession:input_type -> nutrix.inference.CreateUploadSessionRequest
+	3,  // 6: nutrix.inference.InferenceService.ConfirmUpload:input_type -> nutrix.inference.ConfirmUploadRequest
+	5,  // 7: nutrix.inference.InferenceService.AnalyzeMealImage:input_type -> nutrix.inference.AnalyzeMealImageRequest
+	11, // 8: nutrix.inference.InferenceService.EstimateVolume:output_type -> nutrix.inference.EstimateVolumeResponse
+	2,  // 9: nutrix.inference.InferenceService.CreateUploadSession:output_type -> nutrix.inference.CreateUploadSessionResponse
+	4,  // 10: nutrix.inference.InferenceService.ConfirmUpload:output_type -> nutrix.inference.ConfirmUploadResponse
+	6,  // 11: nutrix.inference.InferenceService.AnalyzeMealImage:output_type -> nutrix.inference.AnalyzeMealImageResponse
+	8,  // [8:12] is the sub-list for method output_type
+	4,  // [4:8] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_inference_proto_init() }
@@ -666,13 +985,14 @@ func file_inference_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_inference_proto_rawDesc), len(file_inference_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   6,
+			NumEnums:      1,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_inference_proto_goTypes,
 		DependencyIndexes: file_inference_proto_depIdxs,
+		EnumInfos:         file_inference_proto_enumTypes,
 		MessageInfos:      file_inference_proto_msgTypes,
 	}.Build()
 	File_inference_proto = out.File

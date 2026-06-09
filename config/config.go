@@ -29,6 +29,9 @@ type Config struct {
 	RedisURL           string
 	RedisPassword      string
 	RabbitMQURL        string
+	// Internal Services
+	GRPCAIHost         string
+	GRPCAIPort         string
 }
 
 // LoadConfig reads from .env (if present) then from the process environment.
@@ -116,6 +119,16 @@ func LoadConfig() *Config {
 		panic("CRITICAL: HMAC_KEY must be exactly 32 bytes. Terminating for safety.")
 	}
 
+	grpcAIHost := os.Getenv("GRPC_AI_HOST")
+	if grpcAIHost == "" {
+		panic("CRITICAL: GRPC_AI_HOST environment variable is missing. Terminating for safety.")
+	}
+	
+	grpcAIPort := os.Getenv("GRPC_AI_PORT")
+	if grpcAIPort == "" {
+		panic("CRITICAL: GRPC_AI_PORT environment variable is missing. Terminating for safety.")
+	}
+
 	return &Config{
 		Port:               port,
 		DBDSN:              os.Getenv("DB_DSN"),
@@ -131,5 +144,7 @@ func LoadConfig() *Config {
 		RedisURL:           os.Getenv("REDIS_URL"),
 		RedisPassword:      os.Getenv("REDIS_PASSWORD"),
 		RabbitMQURL:        os.Getenv("RABBITMQ_URL"),
+		GRPCAIHost:         grpcAIHost,
+		GRPCAIPort:         grpcAIPort,
 	}
 }

@@ -31,15 +31,15 @@ type Violation struct {
 	Explanation string
 }
 
-type Recommendation struct {
-	FoodID   string
-	FoodName string
-	Score    float32
-	Reason   string
+// Recommendation now defined in food.go
+
+type BatchFoodMetadata struct {
+	KGMetadata *KGMetadata
 }
 
 // InferencePort là interface abstract giao tiếp với AI Service (Dependency Inversion).
 type InferencePort interface {
 	EstimateVolume(ctx context.Context, imageBytes []byte) (*InferenceResult, error)
 	AnalyzeMealImage(ctx context.Context, imageBytes []byte, userDiseases []string) (*AnalyzeMealResult, error)
+	BatchAnalyzeFoods(ctx context.Context, foodIDs []string, userDiseases []string) (map[string]BatchFoodMetadata, error)
 }

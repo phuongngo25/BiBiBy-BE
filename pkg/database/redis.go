@@ -8,6 +8,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"nutrix-backend/config"
+	"nutrix-backend/internal/infrastructure/metrics"
 )
 
 // NewRedisClient initializes a singleton Redis client with production-grade timeouts and retry logic.
@@ -23,6 +24,7 @@ func NewRedisClient(cfg *config.Config) (*redis.Client, error) {
 	}
 
 	rdb := redis.NewClient(opts)
+	rdb.AddHook(metrics.RedisMetricsHook{})
 
 	// Fail-fast startup check: Wait up to 2s for a PING
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

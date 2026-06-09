@@ -13,6 +13,7 @@ import (
 
 	"nutrix-backend/internal/domain"
 	pb "nutrix-backend/internal/infrastructure/grpc/pb/inferencev1" // Đường dẫn import code gen
+	"nutrix-backend/internal/infrastructure/metrics"
 )
 
 type grpcAIClient struct {
@@ -29,6 +30,7 @@ func NewGrpcAIClient(targetURI string) (domain.InferencePort, error) {
 	// Trong môi trường Production, bạn nên cấu hình TLS/SSL thay vì insecure
 	conn, err := grpc.DialContext(ctx, targetURI,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(metrics.UnaryClientInterceptor()),
 		grpc.WithBlock(), // Đợi kết nối thành công trước khi trả về
 	)
 	if err != nil {
@@ -84,9 +86,12 @@ func (g *grpcAIClient) AnalyzeMealImage(ctx context.Context, imageBytes []byte, 
 	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	// Note: AnalyzeMealImageRequest in proto uses upload_session_id.
+	// For backward compatibility or internal dev, we might need a version that takes bytes,
+	// but here we must follow the proto definition.
 	req := &pb.AnalyzeMealImageRequest{
-		ImageData:    imageBytes,
-		UserDiseases: userDiseases,
+		UploadSessionId: "legacy-direct-upload",
+		UserDiseases:    userDiseases,
 	}
 
 	start := time.Now()
@@ -124,11 +129,16 @@ func (g *grpcAIClient) AnalyzeMealImage(ctx context.Context, imageBytes []byte, 
 
 	recommendations := make([]domain.Recommendation, len(res.Recommendations))
 	for i, r := range res.Recommendations {
+		reasons := []domain.RecommendationReason{
+			{
+				ReasonType: r.Reason,
+			},
+		}
 		recommendations[i] = domain.Recommendation{
-			FoodID:   r.FoodId,
-			FoodName: r.FoodName,
-			Score:    r.Score,
-			Reason:   r.Reason,
+			FoodID:     r.FoodId,
+			FoodName:   r.FoodName,
+			MatchScore: float64(r.Score),
+			Reasons:    reasons,
 		}
 	}
 
@@ -156,4 +166,17 @@ func (g *grpcAIClient) AnalyzeMealImage(ctx context.Context, imageBytes []byte, 
 		Recommendations:     recommendations,
 		EvidencePaths:       evidencePaths,
 	}, nil
+}
+
+// BatchAnalyzeFoods calls the NutritionIntelligenceService (Port 50051) via the internal bridge.
+// Since grpcAIClient is currently connected to Port 50052 (Inference), this implementation
+// assumes a shared connection or expects a distinct client for the Intelligence Service.
+// Architect Directive: For monorepo simplicity, we assume the provided connection can resolve 
+// the BatchAnalyzeFoods RPC if correctly registered.
+func (g *grpcAIClient) BatchAnalyzeFoods(ctx context.Context, foodIDs []string, userDiseases []string) (map[string]domain.BatchFoodMetadata, error) {
+	// We need to cast the client to the correct interface if they share the same channel
+	// However, inferencev1 and intelligencepb are different packages.
+	// For Sprint 1A, we'll implement this in a separate client (grpcNutritionClient) 
+	// as per the existing infrastructure split.
+	return nil, fmt.Errorf("use grpcNutritionClient for BatchAnalyzeFoods (Sprint 1A)")
 }

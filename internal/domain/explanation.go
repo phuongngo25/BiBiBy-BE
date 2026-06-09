@@ -42,3 +42,22 @@ func NewExplanation() Explanation {
 		Warnings:      make([]Reason, 0),
 	}
 }
+
+// FoodExplanation represents the graph-based reasoning result for a specific food.
+type FoodExplanation struct {
+	FoodID        string         `json:"food_id"`
+	EvidencePaths []EvidencePath `json:"evidence_paths"`
+}
+
+// EvidencePath represents a single traversal from food to disease.
+type EvidencePath struct {
+	DiseaseID string         `json:"disease_id"`
+	Nodes     []EvidenceNode `json:"nodes"`
+}
+
+// EvidenceNode represents a single jump in the knowledge graph.
+type EvidenceNode struct {
+	NodeType string `json:"node_type"`
+	NodeID   string `json:"node_id"`
+	NodeName string `json:"node_name"`
+}

@@ -31,6 +31,27 @@ type Food struct {
 	ImageURL        string            `json:"image_url"`
 	IsVerified      bool              `json:"is_verified"       gorm:"default:true"`
 	CreatorID       *uuid.UUID        `json:"creator_id"`
+
+	// KG Metadata (Sprint 1A: Search Exposure)
+	KGMetadata *KGMetadata `json:"kg_metadata" gorm:"-"`
+}
+
+// KGMetadata represents Knowledge Graph safety signals for a food item.
+type KGMetadata struct {
+	IsSafe              bool        `json:"is_safe"`
+	RiskLevel           string      `json:"risk_level"`
+	Warnings            []KGWarning `json:"warnings"`
+	Explanation         string      `json:"explanation"`
+	RecommendationTrace []string    `json:"recommendation_trace"`
+	KGVersion           string      `json:"kg_version"`
+	GeneratedAt         int64       `json:"generated_at"`
+}
+
+// KGWarning represents a specific safety violation.
+type KGWarning struct {
+	Code     string `json:"code"`
+	Message  string `json:"message"`
+	Severity string `json:"severity"`
 }
 
 // MealLog (FoodLog) represents a user logging a specific food consumption.
@@ -88,6 +109,33 @@ type DailyPlanResponse struct {
 	RecommendedFoods []Food    `json:"recommended_foods"`
 }
 
+type GetRecommendationsRequest struct {
+	Gaps []NutritionGap `json:"gaps"`
+}
+
+type NutritionGap struct {
+	NutrientCode string  `json:"nutrient_code"`
+	GapAmount    float64 `json:"gap_amount"`
+	Unit         string  `json:"unit"`
+}
+
+type GetRecommendationsResponse struct {
+	Recommendations []Recommendation `json:"recommendations"`
+}
+
+type Recommendation struct {
+	FoodID     string                 `json:"food_id"`
+	FoodName   string                 `json:"food_name"`
+	MatchScore float64                `json:"match_score"`
+	Reasons    []RecommendationReason `json:"reasons"`
+}
+
+type RecommendationReason struct {
+	NutrientCode      string  `json:"nutrient_code"`
+	ContributionScore float64 `json:"contribution_score"`
+	ReasonType        string  `json:"reason_type"`
+}
+
 // DailyCalorieAggregate holds total calories consumed or burned grouped by day.
 type DailyCalorieAggregate struct {
 	Day   time.Time
@@ -112,7 +160,7 @@ type DayAnalytics struct {
 	TotalBurned        int    `json:"total_burned"`         // EstimatedDailyBurn + WorkoutBurned
 	CalorieGoalHit     bool   `json:"calorie_goal_hit"`
 	WaterGoalHit       bool   `json:"water_goal_hit"`
-	GoalHit            bool   `json:"goal_hit"`             // CalorieGoalHit && WaterGoalHit
+	GoalHit            bool   `json:"goal_hit"` // CalorieGoalHit && WaterGoalHit
 }
 
 // WeeklyAnalyticsResponse is the payload for GET /nutrition/analytics/weekly.
@@ -158,7 +206,7 @@ type NutritionRepository interface {
 	GetWeeklyBurned(ctx context.Context, userID uuid.UUID, days int) (map[string]float64, error)
 	GetMealLogForUpdate(ctx context.Context, logID, userID uuid.UUID) (*MealLog, error)
 	UpdateMealLog(ctx context.Context, log *MealLog) error
-	
+
 	// Hydration Methods
 	LogWater(ctx context.Context, log *WaterLog) error
 	GetDailyConsumedWater(ctx context.Context, userID uuid.UUID, date time.Time) (int, error)
@@ -186,13 +234,71 @@ type NutritionUseCase interface {
 	GetDayAnalytics(ctx context.Context, userID uuid.UUID, dateStr string) (*DayAnalytics, error)
 	GetWeeklyAnalytics(ctx context.Context, userID uuid.UUID, days int, isCalendar bool) (*WeeklyAnalyticsResponse, error)
 	GetMonthlyAnalytics(ctx context.Context, userID uuid.UUID, monthStr string) (*MonthlyAnalyticsResponse, error)
+	ExplainFood(ctx context.Context, userID uuid.UUID, foodID string) (*FoodExplanation, error)
+	GetRecommendations(ctx context.Context, userID uuid.UUID, req *GetRecommendationsRequest) (*GetRecommendationsResponse, error)
 	EstimateNutrition(ctx context.Context, imageBytes []byte) (*FoodEstimateResponse, error)
 	GetStreak(ctx context.Context, userID uuid.UUID) (*UserStreak, error)
 	UpdateFoodLog(ctx context.Context, userID, logID uuid.UUID, quantity float64) (*MealLog, error)
 	GetJobStatus(ctx context.Context, jobID string) (*JobStatusResponse, error)
-	
+
 	// Hydration Methods
 	LogWater(ctx context.Context, userID uuid.UUID, req *LogWaterRequest) (*LogWaterResponse, error)
+
+	// Thresholds & Feedback (Epic 1)
+	GetThresholdSnapshot(ctx context.Context, userID uuid.UUID) (*ThresholdSnapshot, error)
+	SubmitFoodFeedback(ctx context.Context, userID uuid.UUID, req *FoodFeedbackRequest) error
+
+	// Planner / Meal Validation (Epic 1 Chunk C)
+	AnalyzeMeal(ctx context.Context, userID uuid.UUID, req *AnalyzeMealRequest) (*AnalyzeMealResponse, error)
+	GenerateWeeklyPlan(ctx context.Context, userID uuid.UUID, req *GenerateWeeklyPlanRequest) (*GenerateWeeklyPlanResponse, error)
+	ReoptimizePlan(ctx context.Context, userID uuid.UUID, req *ReoptimizeWeeklyPlanRequest) (*GenerateWeeklyPlanResponse, error)
+}
+
+// ─── Planner DTOs ───────────────────────────────────────────
+
+type GenerateWeeklyPlanRequest struct {
+	StartDate      string   `json:"startDate"`
+	Goal           string   `json:"goal"`
+	GoalType       string   `json:"goalType"`
+	Strategy       string   `json:"strategy"`
+	CandidateFoods []string `json:"candidate_foods"`
+}
+
+type PlannedMealDTO struct {
+	MealID   string   `json:"meal_id"`
+	Date     string   `json:"date"`
+	FoodIDs  []string `json:"food_ids"`
+	MealType string   `json:"meal_type"`
+	Status   string   `json:"status"`
+	FoodName string   `json:"food_name,omitempty"`
+	Calories float64  `json:"calories,omitempty"`
+	Protein  float64  `json:"protein,omitempty"`
+	Carbs    float64  `json:"carbs,omitempty"`
+	Fat      float64  `json:"fat,omitempty"`
+}
+
+type WeeklyPlanResponseDTO struct {
+	PlanID string           `json:"plan_id"`
+	Meals  []PlannedMealDTO `json:"meals"`
+}
+
+type GenerateWeeklyPlanResponse struct {
+	WeeklyPlanResponseDTO
+}
+
+type PlannerAdjustmentDTO struct {
+	Type            string `json:"type"`
+	TargetDate      string `json:"targetDate,omitempty"`
+	TargetMealType  string `json:"targetMealType,omitempty"`
+	PreferredFoodID string `json:"preferredFoodId,omitempty"`
+}
+
+type ReoptimizeWeeklyPlanRequest struct {
+	PlanID     string               `json:"planId"`
+	Adjustment PlannerAdjustmentDTO `json:"adjustment"`
+
+	// Optional: Send the current plan to avoid DB lookup for this prototype
+	CurrentPlan *WeeklyPlanResponseDTO `json:"currentPlan,omitempty"`
 }
 
 // JobStatusResponse represents the unified DTO for external API consumers checking orchestrator jobs.

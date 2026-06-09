@@ -2,15 +2,20 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 
 	"nutrix-backend/internal/domain"
+	"nutrix-backend/internal/infrastructure/metrics"
 	"nutrix-backend/internal/nutrition/service"
 	"nutrix-backend/pkg/spoonacular"
 )
@@ -18,17 +23,22 @@ import (
 type nutritionUseCase struct {
 	repo                domain.NutritionRepository
 	streakRepo          domain.StreakRepository
-	achievementRepo      domain.AchievementRepository
+	achievementRepo     domain.AchievementRepository
 	spoonClient         *spoonacular.Client
 	workoutRepo         domain.WorkoutRepository
 	userRepo            domain.UserRepository
 	analyticsService    service.AnalyticsAggregationService
 	streakService       service.StreakEvaluationService
 	gamificationService service.GamificationService
-	aiPort              domain.InferencePort
+	cvPort              domain.InferencePort
+	kgPort              domain.NutritionIntelligencePort
+	redis               *redis.Client
+
+	planCache map[string]*domain.WeeklyPlanResponseDTO
+	mu        sync.RWMutex
 }
 
-// NewNutritionUseCase creates the usecase wired with the nutrition repository, streak repository, Spoonacular client, workout repository and user repository.
+// NewNutritionUseCase creates the usecase wired with dependencies.
 func NewNutritionUseCase(
 	repo domain.NutritionRepository,
 	streakRepo domain.StreakRepository,
@@ -36,7 +46,9 @@ func NewNutritionUseCase(
 	spoonClient *spoonacular.Client,
 	workoutRepo domain.WorkoutRepository,
 	userRepo domain.UserRepository,
-	aiPort domain.InferencePort,
+	cvPort domain.InferencePort,
+	kgPort domain.NutritionIntelligencePort,
+	redis *redis.Client,
 ) domain.NutritionUseCase {
 	analyticsSvc := service.NewAnalyticsAggregationService(repo, userRepo)
 	var streakSvc service.StreakEvaluationService
@@ -52,133 +64,157 @@ func NewNutritionUseCase(
 	return &nutritionUseCase{
 		repo:                repo,
 		streakRepo:          streakRepo,
-		achievementRepo:      achievementRepo,
+		achievementRepo:     achievementRepo,
 		spoonClient:         spoonClient,
 		workoutRepo:         workoutRepo,
 		userRepo:            userRepo,
 		analyticsService:    analyticsSvc,
 		streakService:       streakSvc,
 		gamificationService: gamificationSvc,
-		aiPort:              aiPort,
+		cvPort:              cvPort,
+		kgPort:              kgPort,
+		redis:               redis,
+		planCache:           make(map[string]*domain.WeeklyPlanResponseDTO),
 	}
 }
 
-// SearchFoods is the "Local First, API Second" entrypoint (GET /nutrition/foods/search?q=).
-//
-// The local DB query uses pg_trgm fuzzy matching + 3-tier relevance ordering,
-// so ANY non-empty local result set is considered high-quality and returned immediately.
-//
-// Spoonacular is ONLY called when localResults is completely empty (true cache miss).
-// New remote results are then upserted asynchronously for future local cache hits.
+// SearchFoods is enriched with KG Metadata (Sprint 1A).
 func (u *nutritionUseCase) SearchFoods(ctx context.Context, keyword string) ([]domain.Food, error) {
 	if strings.TrimSpace(keyword) == "" {
 		return []domain.Food{}, nil
 	}
 
-	// ── Local DB (always first) ───────────────────────────────────────────────
-	// The repository applies fuzzy + relevance ranking; any result here is trustworthy.
+	// 1. Local Search
 	localResults, _ := u.repo.SearchFoods(ctx, keyword)
+
+	var rawResults []domain.Food
 	if len(localResults) > 0 {
-		log.Printf("[SearchFoods] Local HIT for %q → %d results (no API call)", keyword, len(localResults))
-		return localResults, nil
-	}
-
-	// ── Spoonacular fallback (true cache miss only) ───────────────────────────
-	if u.spoonClient == nil {
-		return []domain.Food{}, nil
-	}
-
-	log.Printf("[SearchFoods] Local MISS for %q — calling Spoonacular", keyword)
-
-	recipes, spErr := u.spoonClient.ComplexSearch(ctx, keyword, "", "", 0)
-	if spErr != nil {
-		log.Printf("[SearchFoods] Spoonacular error for %q: %v", keyword, spErr)
-		return []domain.Food{}, nil // Degrade gracefully — never 500 the user
-	}
-
-	if len(recipes) == 0 {
-		return []domain.Food{}, nil
-	}
-
-	spoonFoods := mapComplexResultsToFoods(recipes)
-
-	// ── Async upsert — build local cache for future searches ──────────────────
-	go func(foods []domain.Food) {
-		if err := u.repo.UpsertFoods(context.Background(), foods); err != nil {
-			log.Printf("[SearchFoods] Background upsert failed for %q: %v", keyword, err)
-		} else {
-			log.Printf("[SearchFoods] Background upsert: cached %d foods for %q", len(foods), keyword)
+		rawResults = localResults
+	} else if u.spoonClient != nil {
+		recipes, spErr := u.spoonClient.ComplexSearch(ctx, keyword, "", "", 0)
+		if spErr == nil && len(recipes) > 0 {
+			rawResults = mapComplexResultsToFoods(recipes)
+			go func(foods []domain.Food) {
+				_ = u.repo.UpsertFoods(context.Background(), foods)
+			}(rawResults)
 		}
-	}(spoonFoods)
+	}
 
-	return spoonFoods, nil
+	if len(rawResults) == 0 {
+		return []domain.Food{}, nil
+	}
+
+	// 2. KG Batch Enrichment with Redis Caching (Sprint 1AA)
+	diseaseIDs := []string{}
+	profileHash := "default_profile"
+
+	missingFoodIDs := make([]string, 0, len(rawResults))
+	enrichedMap := make(map[string]domain.BatchFoodMetadata)
+
+	for _, f := range rawResults {
+		foodID := f.ID.String()
+		cacheKey := fmt.Sprintf("kg:v2:food:%s:risk:%s", foodID, profileHash)
+
+		if u.redis != nil {
+			cached, err := u.redis.Get(ctx, cacheKey).Result()
+			if err == nil && cached != "" {
+				var meta domain.KGMetadata
+				if json.Unmarshal([]byte(cached), &meta) == nil {
+					enrichedMap[foodID] = domain.BatchFoodMetadata{KGMetadata: &meta}
+					continue
+				}
+			}
+		}
+		missingFoodIDs = append(missingFoodIDs, foodID)
+	}
+
+	if len(missingFoodIDs) > 0 {
+		if u.kgPort != nil {
+			log.Printf("[SearchFoods] KG Cache MISS for %d foods -> calling AI Server", len(missingFoodIDs))
+			newEnriched, err := u.kgPort.BatchAnalyzeFoods(ctx, missingFoodIDs, diseaseIDs)
+			if err == nil {
+				for fID, metadata := range newEnriched {
+					enrichedMap[fID] = metadata
+					if u.redis != nil && metadata.KGMetadata != nil {
+						cacheKey := fmt.Sprintf("kg:v2:food:%s:risk:%s", fID, profileHash)
+						jsonData, _ := json.Marshal(metadata.KGMetadata)
+						u.redis.Set(ctx, cacheKey, string(jsonData), 24*time.Hour)
+					}
+				}
+			} else {
+				log.Printf("[SearchFoods] KG Enrichment failed: %v", err)
+			}
+		}
+	} else {
+		log.Printf("[SearchFoods] KG Cache HIT for all %d foods", len(rawResults))
+	}
+
+	for i := range rawResults {
+		if metadata, ok := enrichedMap[rawResults[i].ID.String()]; ok {
+			rawResults[i].KGMetadata = metadata.KGMetadata
+		} else {
+			rawResults[i].KGMetadata = &domain.KGMetadata{
+				IsSafe:    false,
+				RiskLevel: "UNKNOWN",
+				Warnings: []domain.KGWarning{
+					{Code: "SRE_UNAVAILABLE", Message: "Safety analysis unavailable", Severity: "RISK_UNSPECIFIED"},
+				},
+			}
+		}
+	}
+
+	return rawResults, nil
 }
 
-// SearchSpoonacular provides a health-safe Read-Through Cache.
-// If diet OR intolerances are specified, bypass local cache entirely (allergy safety).
-// Otherwise, check local DB first and only call API on cache-miss.
 func (u *nutritionUseCase) SearchSpoonacular(ctx context.Context, query, diet, intolerances string, maxCarbs int) ([]domain.Food, error) {
 	if u.spoonClient == nil {
 		return nil, fmt.Errorf("spoonacular client is not configured")
 	}
-
-	// Health-safety bypass: never serve potentially mismatched local results when dietary filters are active
 	if diet == "" && intolerances == "" {
 		localResults, err := u.repo.SearchFoods(ctx, query)
 		if err == nil && len(localResults) > 0 {
 			return localResults, nil
 		}
 	}
-
-	// Cache miss (or allergy filter present) → call Spoonacular
 	recipes, err := u.spoonClient.ComplexSearch(ctx, query, diet, intolerances, maxCarbs)
 	if err != nil {
 		return nil, fmt.Errorf("spoonacular search failed: %w", err)
 	}
-
 	foods := mapComplexResultsToFoods(recipes)
-	_ = u.repo.UpsertFoods(ctx, foods) // Best-effort cache persist
+	_ = u.repo.UpsertFoods(ctx, foods)
 	return foods, nil
 }
 
-// SearchByNutrients checks local DB with strict numeric bounds before calling API.
 func (u *nutritionUseCase) SearchByNutrients(ctx context.Context, minProtein, maxFat, minCalories, maxCalories float64) ([]domain.Food, error) {
 	localResults, err := u.repo.SearchFoodsByNutrients(ctx, minProtein, maxFat, minCalories, maxCalories)
 	if err == nil && len(localResults) > 0 {
 		return localResults, nil
 	}
-
 	if u.spoonClient == nil {
 		return []domain.Food{}, nil
 	}
-
 	results, err := u.spoonClient.FindByNutrients(ctx, minProtein, maxFat, minCalories, maxCalories)
 	if err != nil {
 		return nil, fmt.Errorf("spoonacular findByNutrients failed: %w", err)
 	}
-
 	foods := mapNutrientResultsToFoods(results)
 	_ = u.repo.UpsertFoods(ctx, foods)
 	return foods, nil
 }
 
-// SearchByIngredients always calls Spoonacular directly — local DB has no ingredient index.
 func (u *nutritionUseCase) SearchByIngredients(ctx context.Context, ingredients string) ([]domain.Food, error) {
 	if u.spoonClient == nil {
 		return nil, fmt.Errorf("spoonacular client is not configured")
 	}
-
 	results, err := u.spoonClient.FindByIngredients(ctx, ingredients)
 	if err != nil {
 		return nil, fmt.Errorf("spoonacular findByIngredients failed: %w", err)
 	}
-
 	foods := mapIngredientResultsToFoods(results)
 	_ = u.repo.UpsertFoods(ctx, foods)
 	return foods, nil
 }
 
-// CreateFood builds a Food entity from the request and persists it.
 func (u *nutritionUseCase) CreateFood(ctx context.Context, req *domain.CreateFoodRequest) (*domain.Food, error) {
 	food := &domain.Food{
 		Name:            req.Name,
@@ -200,20 +236,16 @@ func (u *nutritionUseCase) CreateFood(ctx context.Context, req *domain.CreateFoo
 	return food, nil
 }
 
-// LogMeal verifies the food exists and records it for the user.
 func (u *nutritionUseCase) LogMeal(ctx context.Context, userID uuid.UUID, req *domain.LogMealRequest) (*domain.MealLog, error) {
 	food, err := u.repo.GetFoodByID(ctx, req.FoodID)
 	if err != nil {
 		return nil, err
 	}
-
 	date, err := time.Parse("2006-01-02", req.ConsumedDate)
 	if err != nil {
 		date = time.Now()
 	}
-
 	ratio := req.QuantityGrams / 100.0
-
 	mealLog := &domain.MealLog{
 		UserID:           userID,
 		FoodID:           food.ID,
@@ -225,49 +257,45 @@ func (u *nutritionUseCase) LogMeal(ctx context.Context, userID uuid.UUID, req *d
 		FatConsumed:      food.FatPer100g * ratio,
 		CarbsConsumed:    food.CarbsPer100g * ratio,
 	}
-
 	if err := u.repo.LogMeal(ctx, mealLog); err != nil {
 		return nil, domain.ErrInternalServerError
 	}
-
 	mealLog.Food = *food
 	u.evaluateStreakHook(ctx, userID, date)
 	return mealLog, nil
 }
 
-// GetDailyPlan builds a summary of a specific day's consumed macros and suggests new foods.
 func (u *nutritionUseCase) GetDailyPlan(ctx context.Context, userID uuid.UUID, dateStr string) (*domain.DailyPlanResponse, error) {
 	requestedDate, err := time.Parse("2006-01-02", dateStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid date format: %w", err)
 	}
-	log.Printf("[DAILY_PLAN] parsedDate=%v", requestedDate)
-
 	logs, err := u.repo.GetDailyLogs(ctx, userID, requestedDate)
 	if err != nil {
 		return nil, err
 	}
-
 	var consumedCalories float64
 	for _, l := range logs {
 		consumedCalories += l.CaloriesConsumed
 	}
-	log.Printf("[DAILY_PLAN] mealsReturned=%d consumedCalories=%.1f", len(logs), consumedCalories)
-
 	suggestions, err := u.repo.GetRandomFoods(ctx, 5)
 	if err != nil {
 		suggestions = []domain.Food{}
 	}
-
 	burnedKcal, _ := u.workoutRepo.GetDailyBurnedCalories(ctx, userID, requestedDate)
-
 	targetCalories := 2000.0
 	targetWater := 2000
+	waterDate := requestedDate
 	userProfile, err := u.userRepo.GetByID(ctx, userID)
 	if err == nil && userProfile != nil {
-		// Resolve snapshot date at midnight UTC (DATE column mapping)
+		loc := time.UTC
+		if userProfile.Timezone != "" {
+			if l, errLoc := time.LoadLocation(userProfile.Timezone); errLoc == nil {
+				loc = l
+			}
+		}
+		waterDate = time.Date(requestedDate.Year(), requestedDate.Month(), requestedDate.Day(), 0, 0, 0, 0, loc)
 		snapshotDate := time.Date(requestedDate.Year(), requestedDate.Month(), requestedDate.Day(), 0, 0, 0, 0, time.UTC)
-
 		calcService := service.NewHealthCalculationService()
 		bmr := int(math.Round(userProfile.BMR))
 		if bmr <= 0 && userProfile.WeightKg > 0 && userProfile.HeightCm > 0 && userProfile.DOB != nil {
@@ -277,10 +305,8 @@ func (u *nutritionUseCase) GetDailyPlan(ctx context.Context, userID uuid.UUID, d
 		if tdee <= 0 && bmr > 0 {
 			tdee = calcService.CalculateTDEE(bmr, userProfile.ActivityLevel)
 		}
-
 		strategy := service.NewGoalStrategyV1()
 		targetCal, targetWat := strategy.CalculateTargets(userProfile)
-
 		draft := &domain.DailyHealthSnapshot{
 			UserID:              userID,
 			SnapshotDate:        snapshotDate,
@@ -293,25 +319,21 @@ func (u *nutritionUseCase) GetDailyPlan(ctx context.Context, userID uuid.UUID, d
 			TargetWater:         targetWat,
 			GoalStrategyVersion: "v1",
 		}
-
 		snapshot, snapErr := u.repo.GetOrCreateSnapshot(ctx, draft)
 		if snapErr == nil && snapshot != nil {
 			targetCalories = float64(snapshot.TargetCalories)
 			targetWater = snapshot.TargetWater
 			u.evaluateStreakHook(ctx, userID, snapshotDate)
 		} else {
-			// Fallback in case snapshot creation fails
 			targetCalories = float64(targetCal)
 			targetWater = targetWat
 		}
 	}
-
 	consumedWater := 0
-	cw, err := u.repo.GetDailyConsumedWater(ctx, userID, requestedDate)
+	cw, err := u.repo.GetDailyConsumedWater(ctx, userID, waterDate)
 	if err == nil {
 		consumedWater = cw
 	}
-
 	return &domain.DailyPlanResponse{
 		TargetCalories:   targetCalories,
 		ConsumedCalories: consumedCalories,
@@ -323,14 +345,11 @@ func (u *nutritionUseCase) GetDailyPlan(ctx context.Context, userID uuid.UUID, d
 	}, nil
 }
 
-
-// GetDayAnalytics returns analytics for a single calendar day.
 func (u *nutritionUseCase) GetDayAnalytics(ctx context.Context, userID uuid.UUID, dateStr string) (*domain.DayAnalytics, error) {
 	requestedDate, err := time.Parse("2006-01-02", dateStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid date format: %w", err)
 	}
-
 	days, err := u.analyticsService.BuildAnalyticsRange(ctx, userID, requestedDate, requestedDate)
 	if err != nil {
 		return nil, err
@@ -338,19 +357,14 @@ func (u *nutritionUseCase) GetDayAnalytics(ctx context.Context, userID uuid.UUID
 	if len(days) == 0 {
 		return nil, fmt.Errorf("could not retrieve analytics for date")
 	}
-
 	return &days[0], nil
 }
 
-// GetWeeklyAnalytics returns week-over-week nutritional tracking, configurable totals, and metadata.
 func (u *nutritionUseCase) GetWeeklyAnalytics(ctx context.Context, userID uuid.UUID, daysCount int, isCalendar bool) (*domain.WeeklyAnalyticsResponse, error) {
 	if daysCount <= 0 {
 		daysCount = 7
 	}
-
 	var start, end time.Time
-	
-	// Resolve timezone from user profile if available, to make rolling/calendar window calculations timezone-safe.
 	loc := time.UTC
 	userProfile, err := u.userRepo.GetByID(ctx, userID)
 	if err == nil && userProfile != nil && userProfile.Timezone != "" {
@@ -359,34 +373,27 @@ func (u *nutritionUseCase) GetWeeklyAnalytics(ctx context.Context, userID uuid.U
 		}
 	}
 	today := time.Now().In(loc)
-
 	if isCalendar {
-		// Calculate current calendar week (Monday to Sunday) relative to UTC midnights
 		weekday := int(today.Weekday())
 		if weekday == 0 {
-			weekday = 7 // Sunday is 7th day
+			weekday = 7
 		}
 		start = today.AddDate(0, 0, -(weekday - 1))
 		end = start.AddDate(0, 0, 6)
 	} else {
-		// Rolling days (default: 6 days ago -> today)
 		end = today
 		start = today.AddDate(0, 0, -(daysCount - 1))
 	}
-
 	days, err := u.analyticsService.BuildAnalyticsRange(ctx, userID, start, end)
 	if err != nil {
 		return nil, err
 	}
-
 	var totalConsumed, totalBurned, totalWater int
 	for _, d := range days {
 		totalConsumed += d.ConsumedCalories
 		totalBurned += d.WorkoutBurned
 		totalWater += d.ConsumedWater
 	}
-
-	// Calculate active streak within the week range (scanned backwards from the end of the range)
 	streak := 0
 	for i := len(days) - 1; i >= 0; i-- {
 		if days[i].GoalHit {
@@ -395,12 +402,10 @@ func (u *nutritionUseCase) GetWeeklyAnalytics(ctx context.Context, userID uuid.U
 			break
 		}
 	}
-
 	weeklyType := "rolling"
 	if isCalendar {
 		weeklyType = "calendar"
 	}
-
 	return &domain.WeeklyAnalyticsResponse{
 		Type:                   weeklyType,
 		WindowDays:             len(days),
@@ -414,24 +419,19 @@ func (u *nutritionUseCase) GetWeeklyAnalytics(ctx context.Context, userID uuid.U
 	}, nil
 }
 
-// GetMonthlyAnalytics aggregates daily records and calculates streaks deterministically relative to the month's end.
 func (u *nutritionUseCase) GetMonthlyAnalytics(ctx context.Context, userID uuid.UUID, monthStr string) (*domain.MonthlyAnalyticsResponse, error) {
 	parsed, err := time.Parse("2006-01", monthStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid month format: %w", err)
 	}
-
 	start := time.Date(parsed.Year(), parsed.Month(), 1, 0, 0, 0, 0, time.UTC)
 	end := start.AddDate(0, 1, -1)
-
 	days, err := u.analyticsService.BuildAnalyticsRange(ctx, userID, start, end)
 	if err != nil {
 		return nil, err
 	}
-
 	var totalConsumed, totalWater int
 	var goalHitDays, waterHitDays, calorieHitDays int
-
 	for _, d := range days {
 		totalConsumed += d.ConsumedCalories
 		totalWater += d.ConsumedWater
@@ -445,12 +445,9 @@ func (u *nutritionUseCase) GetMonthlyAnalytics(ctx context.Context, userID uuid.
 			calorieHitDays++
 		}
 	}
-
-	// Compute monthly consecutive runs (Longest vs Current)
 	longestRun := 0
 	currentRun := 0
 	tempRun := 0
-
 	for _, d := range days {
 		if d.GoalHit {
 			tempRun++
@@ -461,8 +458,6 @@ func (u *nutritionUseCase) GetMonthlyAnalytics(ctx context.Context, userID uuid.
 			tempRun = 0
 		}
 	}
-
-	// Calculate current active run ending on the last day of the month (deterministic)
 	for i := len(days) - 1; i >= 0; i-- {
 		if days[i].GoalHit {
 			currentRun++
@@ -470,142 +465,92 @@ func (u *nutritionUseCase) GetMonthlyAnalytics(ctx context.Context, userID uuid.
 			break
 		}
 	}
-
 	return &domain.MonthlyAnalyticsResponse{
 		Days:                  days,
 		TotalConsumedCalories: totalConsumed,
 		TotalConsumedWater:    totalWater,
 		GoalHitDays:           goalHitDays,
-		WaterGoalHitDays:      waterHitDays,
-		CalorieGoalHitDays:    calorieHitDays,
 		LongestGoalHitRun:     longestRun,
 		CurrentGoalHitRun:     currentRun,
 	}, nil
 }
 
-
-// ---------------------------------------------------------------------------
-// Mapping helpers — translate Spoonacular DTOs → domain.Food entities
-// ---------------------------------------------------------------------------
-
-func mapComplexResultsToFoods(recipes []spoonacular.RecipeResult) []domain.Food {
-	foods := make([]domain.Food, 0, len(recipes))
-	for _, r := range recipes {
-		id := r.ID
-		foods = append(foods, domain.Food{
-			SpoonacularID:   &id,
-			Code:            fmt.Sprintf("SPOON-%d", r.ID),
-			Name:            r.Title,
-			CaloriesPer100g: r.Nutrition.GetNutrient("Calories"),
-			ProteinPer100g:  r.Nutrition.GetNutrient("Protein"),
-			CarbsPer100g:    r.Nutrition.GetNutrient("Carbohydrates"),
-			FatPer100g:      r.Nutrition.GetNutrient("Fat"),
-			IsVegan:         r.Vegan,
-			IsVegetarian:    r.Vegetarian,
-			IsGlutenFree:    r.GlutenFree,
-			IsDairyFree:     r.DairyFree,
-			ImageURL:        r.Image,
-			ServingSize:     fmt.Sprintf("%.0f servings", r.Servings),
-			Source:          "Spoonacular",
-		})
+func (u *nutritionUseCase) GetRecommendations(ctx context.Context, userID uuid.UUID, req *domain.GetRecommendationsRequest) (*domain.GetRecommendationsResponse, error) {
+	if u.kgPort == nil {
+		return nil, fmt.Errorf("KG service unavailable")
 	}
-	return foods
+
+	return u.kgPort.GetRecommendations(ctx, userID, req)
 }
 
-func mapNutrientResultsToFoods(results []spoonacular.NutrientSearchResult) []domain.Food {
-	foods := make([]domain.Food, 0, len(results))
-	for _, r := range results {
-		id := r.ID
-		foods = append(foods, domain.Food{
-			SpoonacularID:   &id,
-			Code:            fmt.Sprintf("SPOON-%d", r.ID),
-			Name:            r.Title,
-			CaloriesPer100g: r.Calories,
-			ImageURL:        r.Image,
-			Source:          "Spoonacular",
-		})
+func (u *nutritionUseCase) ExplainFood(ctx context.Context, userID uuid.UUID, foodID string) (*domain.FoodExplanation, error) {
+	if u.kgPort == nil {
+		return nil, fmt.Errorf("KG service unavailable")
 	}
-	return foods
+
+	user, err := u.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch user context: %w", err)
+	}
+
+	diseaseStr := strings.TrimSpace(user.MedicalConditions)
+	var diseases []domain.UserDisease
+	if diseaseStr != "" {
+		parts := strings.Split(diseaseStr, ",")
+		for _, part := range parts {
+			diseases = append(diseases, domain.UserDisease{ID: strings.TrimSpace(part)})
+		}
+	}
+
+	userCtx := domain.UserNutritionContext{
+		Diseases: diseases,
+	}
+
+	return u.kgPort.ExplainFood(ctx, userCtx, foodID)
 }
 
-func mapIngredientResultsToFoods(results []spoonacular.IngredientSearchResult) []domain.Food {
-	foods := make([]domain.Food, 0, len(results))
-	for _, r := range results {
-		id := r.ID
-		foods = append(foods, domain.Food{
-			SpoonacularID: &id,
-			Code:          fmt.Sprintf("SPOON-%d", r.ID),
-			Name:          r.Title,
-			ImageURL:      fmt.Sprintf("https://spoonacular.com/recipeImages/%s", r.Image),
-			Source:        "Spoonacular",
-		})
-	}
-	return foods
-}
 func (u *nutritionUseCase) UpdateFoodLog(ctx context.Context, userID, logID uuid.UUID, quantity float64) (*domain.MealLog, error) {
-	// 1. Strict Validation
 	if quantity <= 0 || quantity > 5000 {
 		return nil, domain.ErrInvalidQuantity
 	}
-
 	var updatedLog *domain.MealLog
-
-	// 2. Concurrency Control (Transaction)
 	err := u.repo.WithTransaction(ctx, func(txRepo domain.NutritionRepository) error {
-		// 3. Pessimistic Locking + Ownership check (Anti-Enumeration via ErrLogNotFound)
 		log, err := txRepo.GetMealLogForUpdate(ctx, logID, userID)
 		if err != nil {
 			return err
 		}
-
-		// 4. Recalculate Snapshot Macros
-		// Assuming base nutrition is per 100g
 		ratio := quantity / 100.0
 		log.QuantityGrams = quantity
 		log.CaloriesConsumed = log.Food.CaloriesPer100g * ratio
 		log.ProteinConsumed = log.Food.ProteinPer100g * ratio
 		log.FatConsumed = log.Food.FatPer100g * ratio
 		log.CarbsConsumed = log.Food.CarbsPer100g * ratio
-
-		// 5. Atomic Update
 		if err := txRepo.UpdateMealLog(ctx, log); err != nil {
 			return err
 		}
-
 		updatedLog = log
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
-
 	if updatedLog != nil {
 		u.evaluateStreakHook(ctx, userID, updatedLog.ConsumedDate)
 	}
-
 	return updatedLog, nil
 }
 
-// GetJobStatus serves as a proxy to the Orchestrator's JobStore for the HTTP Delivery layer.
-// In a full integration, the Orchestrator/JobStore would be injected into this UseCase.
 func (u *nutritionUseCase) GetJobStatus(ctx context.Context, jobID string) (*domain.JobStatusResponse, error) {
-	// MOCK INTEGRATION: Simulating JobStore retrieval to satisfy the strict API contract.
 	if jobID == "" {
 		return nil, fmt.Errorf("job not found")
 	}
-
 	return &domain.JobStatusResponse{
-		ID:        jobID,
-		Type:      "meal_plan",
-		Status:    "failed",
-		Done:      true,
+		ID: jobID, Type: "meal_plan", Status: "failed", Done: true,
 		Error:     "panic: runtime error: invalid memory address or nil pointer dereference",
 		UpdatedAt: time.Now(),
 	}, nil
 }
 
-// LogWater records a hydration event for the user.
 func (u *nutritionUseCase) LogWater(ctx context.Context, userID uuid.UUID, req *domain.LogWaterRequest) (*domain.LogWaterResponse, error) {
 	if req.AmountMl <= 0 || req.AmountMl > 2000 {
 		return nil, domain.ErrInvalidQuantity
@@ -614,39 +559,22 @@ func (u *nutritionUseCase) LogWater(ctx context.Context, userID uuid.UUID, req *
 	if len(source) > 50 {
 		source = source[:50]
 	}
-
-	log := &domain.WaterLog{
-		UserID:   userID,
-		AmountMl: req.AmountMl,
-		Source:   source,
-	}
-
+	log := &domain.WaterLog{UserID: userID, AmountMl: req.AmountMl, Source: source}
 	if err := u.repo.LogWater(ctx, log); err != nil {
 		return nil, domain.ErrInternalServerError
 	}
-
 	u.evaluateStreakHook(ctx, userID, time.Now())
-
-	return &domain.LogWaterResponse{
-		ID:        log.ID,
-		AmountMl:  log.AmountMl,
-		Source:    log.Source,
-		CreatedAt: log.CreatedAt,
-	}, nil
+	return &domain.LogWaterResponse{ID: log.ID, AmountMl: log.AmountMl, Source: log.Source, CreatedAt: log.CreatedAt}, nil
 }
 
-// GetStreak retrieves the cached streak for the user. If none exists, it lazy-evaluates and caches it on the fly.
 func (u *nutritionUseCase) GetStreak(ctx context.Context, userID uuid.UUID) (*domain.UserStreak, error) {
 	if u.streakRepo == nil {
 		return &domain.UserStreak{UserID: userID}, nil
 	}
-
 	streak, err := u.streakRepo.GetStreak(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-
-	// Cold-start self-healing: lazy evaluate if no cached record exists
 	if streak == nil {
 		if u.streakService != nil {
 			loc := time.UTC
@@ -657,22 +585,17 @@ func (u *nutritionUseCase) GetStreak(ctx context.Context, userID uuid.UUID) (*do
 				}
 			}
 			today := time.Now().In(loc)
-			
 			streak, err = u.streakService.EvaluateStreak(ctx, userID, today)
 			if err != nil {
-				log.Printf("[GetStreak] dynamic evaluation failed for user %s: %v", userID, err)
 				return &domain.UserStreak{UserID: userID}, nil
 			}
 		} else {
 			return &domain.UserStreak{UserID: userID}, nil
 		}
 	}
-
 	return streak, nil
 }
 
-// evaluateStreakHook triggers the StreakEvaluationService timezone-safely in a background goroutine.
-// As part of the resilient failure policy, cache failures never rollback log mutations.
 func (u *nutritionUseCase) evaluateStreakHook(ctx context.Context, userID uuid.UUID, date time.Time) {
 	if u.streakService == nil {
 		return
@@ -681,99 +604,819 @@ func (u *nutritionUseCase) evaluateStreakHook(ctx context.Context, userID uuid.U
 		bgCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		_, err := u.streakService.EvaluateStreak(bgCtx, userID, date)
-		if err != nil {
-			log.Printf("[Streak Hook] WARNING: Streak evaluation failed for user %s on date %v: %v", userID, date, err)
-		} else {
-			log.Printf("[Streak Hook] Success: Streak evaluated for user %s on date %v", userID, date)
-
-			// Trigger achievement evaluation after successful streak update
-			if u.gamificationService != nil {
-				// Evaluate streak-based achievements
-				if err := u.gamificationService.EvaluateAchievements(bgCtx, userID, domain.TriggerStreakUpdated, date); err != nil {
-					log.Printf("[Achievement Hook] WARNING: Streak achievement evaluation failed for user %s: %v", userID, err)
-				}
-				// Evaluate goal-based achievements for this specific date
-				if err := u.gamificationService.EvaluateAchievements(bgCtx, userID, domain.TriggerDailyGoal, date); err != nil {
-					log.Printf("[Achievement Hook] WARNING: Daily goal achievement evaluation failed for user %s on date %v: %v", userID, date, err)
-				}
-			}
+		if err == nil && u.gamificationService != nil {
+			_ = u.gamificationService.EvaluateAchievements(bgCtx, userID, domain.TriggerStreakUpdated, date)
+			_ = u.gamificationService.EvaluateAchievements(bgCtx, userID, domain.TriggerDailyGoal, date)
 		}
 	}()
 }
-var AIFoodRegistry = map[string]string{
-	"banh_beo": "de9a1cbd-27ed-4cf6-84c4-ac23ae49c7ce",
-	"banh_bot_loc": "8c503823-19d0-4248-9f33-f9320e9c4e7d",
-	"banh_can": "3b607f03-496c-4082-abc1-b1836df08638",
-	"banh_canh": "cbe50f45-9654-4799-ab1f-97ec683477c3",
-	"banh_chung": "09982e82-ce84-440d-9c5c-ba70ed20ae38",
-	"banh_cuon": "017ec832-5da8-4a70-9c71-a78263a88b31",
-	"banh_duc": "3f32e1da-c56a-4236-8c5c-0cb4c9e5e178",
-	"banh_gio": "11f2d505-1cc1-4e03-b7cb-028c88aa36a1",
-	"banh_khot": "73b1f6da-170a-4554-9d13-42046c0e14e8",
-	"banh_mi": "a3b7fdae-f6cd-49e9-82f3-f51ec3a534ce",
-	"banh_pia": "e2c3a6e5-aa49-45c7-8b22-bb0dc6349fa2",
-	"banh_tet": "a5a366be-324c-4b40-98e5-df1a4b7e84fc",
-	"banh_trang_nuong": "a3b78b44-3191-4d47-9bde-c5b3de226982",
-	"banh_xeo": "df43cbf0-2f5b-4f80-b575-0d28f15c3a49",
-	"bun_bo_hue": "d34e809b-c634-41ab-8bf2-7086506be757",
-	"bun_dau_mam_tom": "c61c7e67-dc2d-4f97-a252-a4e04db2f88a",
-	"bun_mam": "64479a47-d57a-4b19-b2e2-6d7bbe00dbf9",
-	"bun_rieu": "5c543961-42b2-43c4-a821-0cdf74d7691c",
-	"bun_thit_nuong": "70625c41-0f01-4544-9ad3-3f2ef8a27881",
-	"ca_kho_to": "e6c966f0-f6d0-4328-8c5f-fd7c6be44741",
-	"canh_chua": "d54d6238-e299-4074-b980-54aa66dcdda0",
-	"cao_lau": "8a178f5e-d889-4ea0-a727-4824c8f9e80d",
-	"chao_long": "7788269d-2955-428a-9d61-efa6181ca44f",
-	"com_tam": "db17b81e-e5e2-4a49-ae75-022b58169c20",
-	"goi_cuon": "4674dd55-c4d0-43b8-ba94-949abee2e5f2",
-	"hu_tieu": "455231e5-daf8-4a66-a9f3-0fcd305113d7",
-	"mi_quang": "d2e673de-ae0e-4546-b390-f6cfdf85d467",
-	"nem_chua": "42fd673e-11b5-4298-9353-85cb7e4ef371",
-	"pho": "525514d7-4261-4d7d-8cd6-6c5bcf28646f",
-	"xoi_xeo": "25163e9b-a507-4e51-ba5d-e66cdfcf35d0",
-}
 
 func (u *nutritionUseCase) EstimateNutrition(ctx context.Context, imageBytes []byte) (*domain.FoodEstimateResponse, error) {
-	result, err := u.aiPort.EstimateVolume(ctx, imageBytes)
+	if u.cvPort == nil {
+		return nil, fmt.Errorf("CV service unavailable")
+	}
+	result, err := u.cvPort.EstimateVolume(ctx, imageBytes)
 	if err != nil {
 		return nil, fmt.Errorf("could not estimate from image: %w", err)
 	}
-
 	if result.FoodLabel == "unknown" || result.FoodLabel == "" {
 		return nil, fmt.Errorf("ai could not recognize food in image")
 	}
-
 	dishIDStr, exists := AIFoodRegistry[result.FoodLabel]
 	if !exists {
 		return nil, fmt.Errorf("unsupported food label from AI: %s", result.FoodLabel)
 	}
-
-	parsedDishID, err := uuid.Parse(dishIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid dish ID format in registry: %w", err)
-	}
-
+	parsedDishID, _ := uuid.Parse(dishIDStr)
 	foodInfo, err := u.repo.GetFoodByID(ctx, parsedDishID)
 	if err != nil {
 		return nil, fmt.Errorf("food item not found in DB: %w", err)
 	}
-
-	massGrams := result.MassG
-	ratio := massGrams / 100.0
-
+	ratio := result.MassG / 100.0
 	return &domain.FoodEstimateResponse{
-		FoodID:          foodInfo.ID,
-		FoodLabel:       result.FoodLabel,
-		Name:            foodInfo.Name,
-		Calories:        foodInfo.CaloriesPer100g * ratio,
-		Protein:         foodInfo.ProteinPer100g * ratio,
-		Fat:             foodInfo.FatPer100g * ratio,
-		Carbs:           foodInfo.CarbsPer100g * ratio,
-		CaloriesPer100g: foodInfo.CaloriesPer100g,
-		ProteinPer100g:  foodInfo.ProteinPer100g,
-		FatPer100g:      foodInfo.FatPer100g,
-		CarbsPer100g:    foodInfo.CarbsPer100g,
-		QuantityGrams:   massGrams,
-		Confidence:      result.FoodLabelConfidence,
+		FoodID: foodInfo.ID, FoodLabel: result.FoodLabel, Name: foodInfo.Name,
+		Calories: foodInfo.CaloriesPer100g * ratio, Protein: foodInfo.ProteinPer100g * ratio,
+		Fat: foodInfo.FatPer100g * ratio, Carbs: foodInfo.CarbsPer100g * ratio,
+		CaloriesPer100g: foodInfo.CaloriesPer100g, ProteinPer100g: foodInfo.ProteinPer100g,
+		FatPer100g: foodInfo.FatPer100g, CarbsPer100g: foodInfo.CarbsPer100g,
+		QuantityGrams: result.MassG, Confidence: result.FoodLabelConfidence,
 	}, nil
+}
+
+func (u *nutritionUseCase) GetThresholdSnapshot(ctx context.Context, userID uuid.UUID) (*domain.ThresholdSnapshot, error) {
+	if u.kgPort == nil {
+		return nil, fmt.Errorf("KG service unavailable")
+	}
+
+	user, err := u.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch user context: %w", err)
+	}
+
+	var diseaseIDs []string
+	if user.MedicalConditions != "" {
+		for _, part := range strings.Split(user.MedicalConditions, ",") {
+			diseaseIDs = append(diseaseIDs, strings.TrimSpace(part))
+		}
+	}
+
+	return u.kgPort.GetThresholdSnapshot(ctx, diseaseIDs)
+}
+
+func (u *nutritionUseCase) SubmitFoodFeedback(ctx context.Context, userID uuid.UUID, req *domain.FoodFeedbackRequest) error {
+	if u.kgPort == nil {
+		return fmt.Errorf("KG service unavailable")
+	}
+
+	requestID := firstNonEmpty(
+		req.RequestID,
+		stringFromMetadata(req.Metadata, "request_id"),
+		fmt.Sprintf("req-%d", time.Now().UnixNano()),
+	)
+	predictedFoodID := firstNonEmpty(
+		req.PredictedFoodID,
+		req.FoodID,
+		stringFromMetadata(req.Metadata, "predicted_food_id"),
+	)
+	predictedFoodName := firstNonEmpty(
+		req.PredictedFoodName,
+		stringFromMetadata(req.Metadata, "predicted_food_name"),
+		"Unknown",
+	)
+	finalFoodID := firstNonEmpty(
+		req.FinalFoodID,
+		stringFromMetadata(req.Metadata, "final_food_id"),
+		req.FoodID,
+		predictedFoodID,
+	)
+	finalFoodName := firstNonEmpty(
+		req.FinalFoodName,
+		stringFromMetadata(req.Metadata, "final_food_name"),
+		predictedFoodName,
+	)
+	confidence := firstPositiveFloat(
+		req.PredictionConfidence,
+		floatFromMetadata(req.Metadata, "prediction_confidence"),
+		1.0,
+	)
+	imageHash := firstNonEmpty(req.ImageHash, stringFromMetadata(req.Metadata, "image_hash"))
+	createdAt := firstPositiveInt64(
+		req.CreatedAt,
+		int64FromMetadata(req.Metadata, "created_at"),
+		time.Now().UnixMilli(),
+	)
+
+	var err error
+	switch req.UserAction {
+	case "CORRECTION":
+		err = u.kgPort.SubmitFoodCorrection(ctx, &domain.SubmitFoodCorrectionRequest{
+			RequestID:            requestID,
+			PredictedFoodID:      predictedFoodID,
+			PredictedFoodName:    predictedFoodName,
+			FinalFoodID:          finalFoodID,
+			FinalFoodName:        finalFoodName,
+			PredictionConfidence: confidence,
+			ImageHash:            imageHash,
+			CreatedAt:            createdAt,
+		})
+	case "ACCEPTANCE":
+		err = u.kgPort.SubmitFoodAcceptance(ctx, &domain.SubmitFoodAcceptanceRequest{
+			RequestID:            requestID,
+			PredictedFoodID:      predictedFoodID,
+			PredictedFoodName:    predictedFoodName,
+			PredictionConfidence: confidence,
+			ImageHash:            imageHash,
+			CreatedAt:            createdAt,
+		})
+	case "VIEWED":
+		err = u.kgPort.SubmitFoodViewed(ctx, &domain.SubmitFoodViewedRequest{
+			RequestID:            requestID,
+			PredictedFoodID:      predictedFoodID,
+			PredictedFoodName:    predictedFoodName,
+			PredictionConfidence: confidence,
+			ImageHash:            imageHash,
+			CreatedAt:            createdAt,
+		})
+	default:
+		return fmt.Errorf("invalid user action: %s", req.UserAction)
+	}
+
+	if err == nil {
+		metrics.FeedbackEventsTotal.WithLabelValues(req.UserAction).Inc()
+	}
+
+	return err
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstPositiveFloat(values ...float64) float64 {
+	for _, value := range values {
+		if value > 0 {
+			return value
+		}
+	}
+	return 0
+}
+
+func firstPositiveInt64(values ...int64) int64 {
+	for _, value := range values {
+		if value > 0 {
+			return value
+		}
+	}
+	return 0
+}
+
+func stringFromMetadata(metadata map[string]any, key string) string {
+	if metadata == nil {
+		return ""
+	}
+
+	raw, ok := metadata[key]
+	if !ok || raw == nil {
+		return ""
+	}
+
+	switch value := raw.(type) {
+	case string:
+		return strings.TrimSpace(value)
+	default:
+		return strings.TrimSpace(fmt.Sprint(value))
+	}
+}
+
+func floatFromMetadata(metadata map[string]any, key string) float64 {
+	if metadata == nil {
+		return 0
+	}
+
+	raw, ok := metadata[key]
+	if !ok || raw == nil {
+		return 0
+	}
+
+	switch value := raw.(type) {
+	case float64:
+		return value
+	case float32:
+		return float64(value)
+	case int:
+		return float64(value)
+	case int32:
+		return float64(value)
+	case int64:
+		return float64(value)
+	case string:
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err == nil {
+			return parsed
+		}
+	}
+
+	return 0
+}
+
+func int64FromMetadata(metadata map[string]any, key string) int64 {
+	if metadata == nil {
+		return 0
+	}
+
+	raw, ok := metadata[key]
+	if !ok || raw == nil {
+		return 0
+	}
+
+	switch value := raw.(type) {
+	case int64:
+		return value
+	case int32:
+		return int64(value)
+	case int:
+		return int64(value)
+	case float64:
+		return int64(value)
+	case float32:
+		return int64(value)
+	case string:
+		parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		if err == nil {
+			return parsed
+		}
+	}
+
+	return 0
+}
+
+// ─── Planner / Meal Validation (Epic 1 Chunk C) ──────────────────
+
+func (u *nutritionUseCase) GenerateWeeklyPlan(ctx context.Context, userID uuid.UUID, req *domain.GenerateWeeklyPlanRequest) (*domain.GenerateWeeklyPlanResponse, error) {
+	startTime := time.Now()
+	var statusCode string = "200"
+	defer func() {
+		metrics.PlannerGenerationDurationMs.WithLabelValues("GenerateWeeklyPlan", statusCode).Observe(float64(time.Since(startTime).Milliseconds()))
+	}()
+
+	candidateFoods := req.CandidateFoods
+	generatedFromDB := false
+	dbCandidates := map[string]domain.Food{}
+	if len(candidateFoods) == 0 {
+		foods, err := u.repo.GetRandomFoods(ctx, 100)
+		if err != nil {
+			statusCode = "500"
+			return nil, fmt.Errorf("failed to load planner candidates: %w", err)
+		}
+		userProfile, _ := u.userRepo.GetByID(ctx, userID)
+		candidateFoods = make([]string, 0, len(foods))
+		for _, food := range foods {
+			if !plannerFoodAllowedByProfile(food, userProfile) {
+				continue
+			}
+			foodID := food.ID.String()
+			candidateFoods = append(candidateFoods, foodID)
+			dbCandidates[foodID] = food
+		}
+		generatedFromDB = true
+	}
+
+	var validMeals []domain.PlannedMealDTO
+
+	for i, candidateFoodID := range candidateFoods {
+		mealID := fmt.Sprintf("meal-%d", i)
+		candidate := domain.CandidateMeal{
+			MealID:   mealID,
+			FoodIDs:  []string{candidateFoodID},
+			MealType: "lunch",
+		}
+		if food, ok := dbCandidates[candidateFoodID]; ok {
+			candidate.Ingredients = plannerTerms(food.Name, food.NameEn, food.NameVi)
+			candidate.Categories = plannerTerms(food.Category, food.Source)
+			candidate.ProteinSources = plannerTerms(food.Name, food.NameEn, food.Category)
+		}
+
+		analyzeReq := &domain.AnalyzeMealRequest{
+			Candidate: candidate,
+		}
+
+		analyzeResp, err := u.kgPort.AnalyzeMeal(ctx, analyzeReq)
+		if err != nil {
+			statusCode = "500"
+			metrics.PlannerGenerationFailuresTotal.WithLabelValues("kg_error").Inc()
+			return nil, fmt.Errorf("failed to analyze candidate meal: %w", err)
+		}
+
+		// Fail closed for hard REJECTED meals. For DB-generated candidates, KG
+		// UNKNOWN/unavailable is treated as a coverage gap after local filtering.
+		if analyzeResp.Status == "APPROVED" || analyzeResp.Status == "WARNING" || (generatedFromDB && plannerKGUnavailable(analyzeResp)) {
+			status := analyzeResp.Status
+			if status == "REJECTED" {
+				status = "WARNING"
+			}
+			validMeals = append(validMeals, domain.PlannedMealDTO{
+				MealID:   mealID,
+				FoodIDs:  []string{candidateFoodID},
+				MealType: "lunch",
+				Status:   status,
+			})
+			if food, ok := dbCandidates[candidateFoodID]; ok {
+				validMeals[len(validMeals)-1].FoodName = nonEmptyPlanner(food.Name, food.NameEn, food.NameVi, candidateFoodID)
+				validMeals[len(validMeals)-1].Calories = food.CaloriesPer100g
+				validMeals[len(validMeals)-1].Protein = food.ProteinPer100g
+				validMeals[len(validMeals)-1].Carbs = food.CarbsPer100g
+				validMeals[len(validMeals)-1].Fat = food.FatPer100g
+			}
+		}
+	}
+
+	if len(validMeals) == 0 {
+		statusCode = "422"
+		metrics.PlannerGenerationFailuresTotal.WithLabelValues("all_rejected").Inc()
+		return nil, domain.ErrAllCandidatesRejected
+	}
+
+	meals := validMeals
+	if generatedFromDB {
+		meals = expandWeeklyPlanMeals(validMeals, req.StartDate)
+	}
+
+	resp := &domain.GenerateWeeklyPlanResponse{
+		WeeklyPlanResponseDTO: domain.WeeklyPlanResponseDTO{
+			PlanID: uuid.New().String(),
+			Meals:  meals,
+		},
+	}
+
+	u.mu.Lock()
+	u.planCache[resp.PlanID] = &resp.WeeklyPlanResponseDTO
+	u.mu.Unlock()
+
+	return resp, nil
+}
+
+func plannerFoodAllowedByProfile(food domain.Food, user *domain.User) bool {
+	if user == nil {
+		return true
+	}
+
+	terms := strings.ToLower(strings.Join([]string{
+		food.Name,
+		food.NameEn,
+		food.NameVi,
+		food.Category,
+		food.Source,
+	}, " "))
+
+	for _, allergy := range splitPlannerCSV(user.Allergies) {
+		if allergy == "" {
+			continue
+		}
+		if strings.Contains(terms, allergy) {
+			return false
+		}
+	}
+
+	diet := strings.ToLower(strings.TrimSpace(user.DietaryPreference))
+	switch diet {
+	case "vegan":
+		if containsPlannerTerm(terms, "beef", "chicken", "fish", "meat", "milk", "pork", "seafood", "shrimp", "egg", "dairy") {
+			return false
+		}
+	case "vegetarian":
+		if containsPlannerTerm(terms, "beef", "chicken", "fish", "meat", "pork", "seafood", "shrimp") {
+			return false
+		}
+	case "halal":
+		if containsPlannerTerm(terms, "pork", "bacon", "ham", "lard", "alcohol", "wine", "beer") {
+			return false
+		}
+	}
+
+	return true
+}
+
+func splitPlannerCSV(value string) []string {
+	parts := strings.Split(strings.ToLower(value), ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		result = append(result, strings.TrimSpace(part))
+	}
+	return result
+}
+
+func containsPlannerTerm(haystack string, needles ...string) bool {
+	for _, needle := range needles {
+		if strings.Contains(haystack, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func plannerTerms(values ...string) []string {
+	terms := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			terms = append(terms, value)
+		}
+	}
+	return terms
+}
+
+func nonEmptyPlanner(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return "Planned meal"
+}
+
+func plannerKGUnavailable(resp *domain.AnalyzeMealResponse) bool {
+	if resp == nil {
+		return false
+	}
+	if resp.Status != "REJECTED" {
+		return false
+	}
+	if resp.RiskLevel == "UNKNOWN" || resp.HighestRisk == "UNKNOWN" {
+		return true
+	}
+	if len(resp.Violations) == 0 {
+		return true
+	}
+	for _, violation := range resp.Violations {
+		description := strings.ToLower(violation.Description)
+		severity := strings.ToLower(violation.Severity)
+		if strings.Contains(description, "failed to evaluate") ||
+			strings.Contains(description, "unavailable") ||
+			strings.Contains(severity, "unspecified") ||
+			strings.Contains(severity, "unknown") {
+			return true
+		}
+	}
+	return false
+}
+
+func expandWeeklyPlanMeals(candidates []domain.PlannedMealDTO, startDateRaw string) []domain.PlannedMealDTO {
+	if len(candidates) == 0 {
+		return candidates
+	}
+
+	startDate, err := time.Parse("2006-01-02", startDateRaw)
+	if err != nil {
+		startDate = time.Now()
+	}
+
+	mealTypes := []string{"breakfast", "lunch", "dinner"}
+	meals := make([]domain.PlannedMealDTO, 0, 21)
+	for day := 0; day < 7; day++ {
+		date := startDate.AddDate(0, 0, day).Format("2006-01-02")
+		for slot, mealType := range mealTypes {
+			source := candidates[(day*len(mealTypes)+slot)%len(candidates)]
+			meals = append(meals, domain.PlannedMealDTO{
+				MealID:   fmt.Sprintf("meal-%s-%s", date, mealType),
+				Date:     date,
+				FoodIDs:  source.FoodIDs,
+				MealType: mealType,
+				Status:   source.Status,
+				FoodName: source.FoodName,
+				Calories: source.Calories,
+				Protein:  source.Protein,
+				Carbs:    source.Carbs,
+				Fat:      source.Fat,
+			})
+		}
+	}
+	return meals
+}
+
+func (u *nutritionUseCase) ReoptimizePlan(ctx context.Context, userID uuid.UUID, req *domain.ReoptimizeWeeklyPlanRequest) (*domain.GenerateWeeklyPlanResponse, error) {
+	u.mu.RLock()
+	plan, exists := u.planCache[req.PlanID]
+	u.mu.RUnlock()
+
+	if !exists {
+		if req.CurrentPlan != nil {
+			plan = req.CurrentPlan
+		} else {
+			return nil, fmt.Errorf("plan %s not found in cache", req.PlanID)
+		}
+	}
+
+	// Create a copy of the plan so we don't mutate the original directly
+	newPlan := &domain.WeeklyPlanResponseDTO{
+		PlanID: plan.PlanID,
+		Meals:  make([]domain.PlannedMealDTO, len(plan.Meals)),
+	}
+	copy(newPlan.Meals, plan.Meals)
+
+	// Apply adjustment
+	if req.Adjustment.Type == "swap_meal" {
+		for i, meal := range newPlan.Meals {
+			if meal.Date == req.Adjustment.TargetDate && meal.MealType == req.Adjustment.TargetMealType {
+				// Analyze the replacement
+				candidate := domain.CandidateMeal{
+					MealID:   meal.MealID,
+					FoodIDs:  []string{req.Adjustment.PreferredFoodID},
+					MealType: meal.MealType,
+				}
+
+				analyzeReq := &domain.AnalyzeMealRequest{
+					Candidate: candidate,
+				}
+
+				analyzeResp, err := u.kgPort.AnalyzeMeal(ctx, analyzeReq)
+				if err != nil {
+					return nil, fmt.Errorf("failed to analyze substitute meal: %w", err)
+				}
+
+				if analyzeResp.Status == "REJECTED" {
+					return nil, domain.ErrAllCandidatesRejected // Reuse error for safety
+				}
+
+				newPlan.Meals[i].FoodIDs = []string{req.Adjustment.PreferredFoodID}
+				newPlan.Meals[i].Status = analyzeResp.Status
+			}
+		}
+	}
+
+	u.mu.Lock()
+	u.planCache[req.PlanID] = newPlan
+	u.mu.Unlock()
+
+	return &domain.GenerateWeeklyPlanResponse{
+		WeeklyPlanResponseDTO: *newPlan,
+	}, nil
+}
+
+func (u *nutritionUseCase) AnalyzeMeal(ctx context.Context, userID uuid.UUID, req *domain.AnalyzeMealRequest) (*domain.AnalyzeMealResponse, error) {
+	if u.kgPort == nil {
+		return nil, fmt.Errorf("KG service unavailable")
+	}
+
+	resp, err := u.kgPort.AnalyzeMeal(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	normalized := normalizeAnalyzeMealResponse(resp)
+	if mealAnalysisUnavailable(normalized) {
+		if localResp := u.analyzeMealFromCatalog(ctx, userID, req); localResp != nil {
+			return localResp, nil
+		}
+	}
+
+	return normalized, nil
+}
+
+func (u *nutritionUseCase) analyzeMealFromCatalog(ctx context.Context, userID uuid.UUID, req *domain.AnalyzeMealRequest) *domain.AnalyzeMealResponse {
+	userProfile, _ := u.userRepo.GetByID(ctx, userID)
+	violations := make([]domain.MealViolation, 0)
+
+	for _, foodID := range req.Candidate.FoodIDs {
+		parsedID, err := uuid.Parse(foodID)
+		if err != nil {
+			return nil
+		}
+		food, err := u.repo.GetFoodByID(ctx, parsedID)
+		if err != nil || food == nil {
+			return nil
+		}
+		if !plannerFoodAllowedByProfile(*food, userProfile) {
+			violations = append(violations, domain.MealViolation{
+				ViolationType:    "local_profile_constraint",
+				Description:      fmt.Sprintf("%s conflicts with your dietary profile", nonEmptyPlanner(food.Name, food.NameEn, foodID)),
+				Severity:         "CRITICAL",
+				OffendingFoodIDs: []string{foodID},
+			})
+		}
+	}
+
+	status := "APPROVED"
+	safe := true
+	risk := "SAFE"
+	if len(violations) > 0 {
+		status = "REJECTED"
+		safe = false
+		risk = "CRITICAL"
+	}
+
+	return normalizeAnalyzeMealResponse(&domain.AnalyzeMealResponse{
+		Status:      status,
+		Safe:        safe,
+		RiskLevel:   risk,
+		HighestRisk: risk,
+		Score: domain.MealScore{
+			SafetyScore:        boolScore(safe),
+			MacroScore:         1,
+			MicronutrientScore: 1,
+			ConstraintScore:    boolScore(safe),
+		},
+		Violations:       violations,
+		Fixes:            []domain.MealFixSuggestion{},
+		SafeAlternatives: []domain.MealFixSuggestion{},
+	})
+}
+
+func boolScore(value bool) float64 {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+func mealAnalysisUnavailable(resp *domain.AnalyzeMealResponse) bool {
+	if resp == nil {
+		return false
+	}
+	if resp.RiskLevel == "UNKNOWN" || resp.HighestRisk == "UNKNOWN" {
+		return true
+	}
+	for _, violation := range resp.Violations {
+		description := strings.ToLower(violation.Description)
+		if strings.Contains(description, "not found in database") ||
+			strings.Contains(description, "failed to evaluate food") ||
+			strings.Contains(description, "unavailable") {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeAnalyzeMealResponse(resp *domain.AnalyzeMealResponse) *domain.AnalyzeMealResponse {
+	if resp == nil {
+		return resp
+	}
+
+	highestRisk := highestMealRisk(resp.Status, resp.Violations)
+	resp.HighestRisk = highestRisk
+	resp.RiskLevel = highestRisk
+	resp.Safe = highestRisk == "SAFE"
+
+	if resp.EvidencePath == nil {
+		resp.EvidencePath = make([]domain.MealEvidencePath, 0, len(resp.Violations))
+	}
+	if len(resp.EvidencePath) == 0 {
+		for _, violation := range resp.Violations {
+			resp.EvidencePath = append(resp.EvidencePath, domain.MealEvidencePath{
+				DiseaseID:       violation.ViolationType,
+				RuleDescription: violation.Description,
+				Nodes:           evidenceNodesForViolation(violation),
+			})
+		}
+	}
+
+	if resp.Fixes == nil {
+		resp.Fixes = []domain.MealFixSuggestion{}
+	}
+	if resp.SafeAlternatives == nil {
+		resp.SafeAlternatives = resp.Fixes
+	}
+
+	return resp
+}
+
+func highestMealRisk(status string, violations []domain.MealViolation) string {
+	highest := riskFromMealStatus(status)
+	for _, violation := range violations {
+		current := normalizeMealRisk(violation.Severity)
+		if riskRank(current) > riskRank(highest) {
+			highest = current
+		}
+	}
+	return highest
+}
+
+func riskFromMealStatus(status string) string {
+	switch strings.ToUpper(strings.TrimSpace(status)) {
+	case "APPROVED":
+		return "SAFE"
+	case "WARNING":
+		return "WARNING"
+	case "REJECTED":
+		return "CRITICAL"
+	default:
+		return "UNKNOWN"
+	}
+}
+
+func normalizeMealRisk(value string) string {
+	normalized := strings.ToUpper(strings.TrimSpace(value))
+	normalized = strings.TrimPrefix(normalized, "RISK_LEVEL_")
+	switch normalized {
+	case "CRITICAL", "HIGH", "WARNING", "MODERATE", "LOW", "SAFE":
+		return normalized
+	case "SEVERE":
+		return "CRITICAL"
+	case "":
+		return "UNKNOWN"
+	default:
+		return normalized
+	}
+}
+
+func riskRank(value string) int {
+	switch normalizeMealRisk(value) {
+	case "CRITICAL":
+		return 6
+	case "HIGH":
+		return 5
+	case "WARNING":
+		return 4
+	case "MODERATE":
+		return 3
+	case "LOW":
+		return 2
+	case "SAFE":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func evidenceNodesForViolation(violation domain.MealViolation) []string {
+	nodes := make([]string, 0, len(violation.OffendingFoodIDs)+1)
+	nodes = append(nodes, violation.OffendingFoodIDs...)
+	if strings.TrimSpace(violation.ViolationType) != "" {
+		nodes = append(nodes, violation.ViolationType)
+	}
+	return nodes
+}
+
+var AIFoodRegistry = map[string]string{
+	"banh_beo":         "de9a1cbd-27ed-4cf6-84c4-ac23ae49c7ce",
+	"banh_bot_loc":     "8c503823-19d0-4248-9f33-f9320e9c4e7d",
+	"banh_can":         "3b607f03-496c-4082-abc1-b1836df08638",
+	"banh_canh":        "cbe50f45-9654-4799-ab1f-97ec683477c3",
+	"banh_chung":       "09982e82-ce84-440d-9c5c-ba70ed20ae38",
+	"banh_cuon":        "017ec832-5da8-4a70-9c71-a78263a88b31",
+	"banh_duc":         "3f32e1da-c56a-4236-8c5c-0cb4c9e5e178",
+	"banh_gio":         "11f2d505-1cc1-4e03-b7cb-028c88aa36a1",
+	"banh_khot":        "73b1f6da-170a-4554-9d13-42046c0e14e8",
+	"banh_mi":          "a3b7fdae-f6cd-49e9-82f3-f51ec3a534ce",
+	"banh_pia":         "e2c3a6e5-aa49-45c7-8b22-bb0dc6349fa2",
+	"banh_tet":         "a5a366be-324c-4b40-98e5-df1a4b7e84fc",
+	"banh_trang_nuong": "a3b78b44-3191-4d47-9bde-c5b3de226982",
+	"banh_xeo":         "df43cbf0-2f5b-4f80-b575-0d28f15c3a49",
+	"bun_bo_hue":       "d34e809b-c634-41ab-8bf2-7086506be757",
+	"bun_dau_mam_tom":  "c61c7e67-dc2d-4f97-a252-a4e04db2f88a",
+	"bun_mam":          "64479a47-d57a-4b19-b2e2-6d7bbe00dbf9",
+	"bun_rieu":         "5c543961-42b2-43c4-a821-0cdf74d7691c",
+	"bun_thit_nuong":   "70625c41-0f01-4544-9ad3-3f2ef8a27881",
+	"ca_kho_to":        "e6c966f0-f6d0-4328-8c5f-fd7c6be44741",
+	"canh_chua":        "d54d6238-e299-4074-b980-54aa66dcdda0",
+	"cao_lau":          "8a178f5e-d889-4ea0-a727-4824c8f9e80d",
+	"chao_long":        "7788269d-2955-428a-9d61-efa6181ca44f",
+	"com_tam":          "db17b81e-e5e2-4a49-ae75-022b58169c20",
+	"goi_cuon":         "4674dd55-c4d0-43b8-ba94-949abee2e5f2",
+	"hu_tieu":          "455231e5-daf8-4a66-a9f3-0fcd305113d7",
+	"mi_quang":         "d2e673de-ae0e-4546-b390-f6cfdf85d467",
+	"nem_chua":         "42fd673e-11b5-4298-9353-85cb7e4ef371",
+	"pho":              "525514d7-4261-4d7d-8cd6-6c5bcf28646f",
+	"xoi_xeo":          "25163e9b-a507-4e51-ba5d-e66cdfcf35d0",
+}
+
+func mapComplexResultsToFoods(recipes []spoonacular.RecipeResult) []domain.Food {
+	foods := make([]domain.Food, 0, len(recipes))
+	for _, r := range recipes {
+		id := r.ID
+		foods = append(foods, domain.Food{
+			SpoonacularID: &id, Code: fmt.Sprintf("SPOON-%d", r.ID), Name: r.Title,
+			CaloriesPer100g: r.Nutrition.GetNutrient("Calories"), ProteinPer100g: r.Nutrition.GetNutrient("Protein"),
+			CarbsPer100g: r.Nutrition.GetNutrient("Carbohydrates"), FatPer100g: r.Nutrition.GetNutrient("Fat"),
+			IsVegan: r.Vegan, IsVegetarian: r.Vegetarian, IsGlutenFree: r.GlutenFree, IsDairyFree: r.DairyFree,
+			ImageURL: r.Image, ServingSize: fmt.Sprintf("%.0f servings", r.Servings), Source: "Spoonacular",
+		})
+	}
+	return foods
+}
+
+func mapNutrientResultsToFoods(results []spoonacular.NutrientSearchResult) []domain.Food {
+	foods := make([]domain.Food, 0, len(results))
+	for _, r := range results {
+		id := r.ID
+		foods = append(foods, domain.Food{
+			SpoonacularID: &id, Code: fmt.Sprintf("SPOON-%d", r.ID), Name: r.Title,
+			CaloriesPer100g: r.Calories, ImageURL: r.Image, Source: "Spoonacular",
+		})
+	}
+	return foods
+}
+
+func mapIngredientResultsToFoods(results []spoonacular.IngredientSearchResult) []domain.Food {
+	foods := make([]domain.Food, 0, len(results))
+	for _, r := range results {
+		id := r.ID
+		foods = append(foods, domain.Food{
+			SpoonacularID: &id, Code: fmt.Sprintf("SPOON-%d", r.ID), Name: r.Title,
+			ImageURL: fmt.Sprintf("https://spoonacular.com/recipeImages/%s", r.Image), Source: "Spoonacular",
+		})
+	}
+	return foods
 }
