@@ -1157,18 +1157,28 @@ func (u *nutritionUseCase) ReoptimizePlan(ctx context.Context, userID uuid.UUID,
 
 func (u *nutritionUseCase) AnalyzeMeal(ctx context.Context, userID uuid.UUID, req *domain.AnalyzeMealRequest) (*domain.AnalyzeMealResponse, error) {
 	if u.kgPort == nil {
+		if localResp := u.analyzeMealFromCatalog(ctx, userID, req); localResp != nil {
+			return localResp, nil
+		}
 		return nil, fmt.Errorf("KG service unavailable")
 	}
 
 	resp, err := u.kgPort.AnalyzeMeal(ctx, req)
 	if err != nil {
+		if localResp := u.analyzeMealFromCatalog(ctx, userID, req); localResp != nil {
+			return localResp, nil
+		}
 		return nil, err
 	}
 
 	normalized := normalizeAnalyzeMealResponse(resp)
-	if mealAnalysisUnavailable(normalized) {
-		if localResp := u.analyzeMealFromCatalog(ctx, userID, req); localResp != nil {
+	localResp := u.analyzeMealFromCatalog(ctx, userID, req)
+	if localResp != nil {
+		if len(localResp.Violations) > 0 || mealAnalysisUnavailable(normalized) {
 			return localResp, nil
+		}
+		if normalized.Enrichment == nil {
+			normalized.Enrichment = localResp.Enrichment
 		}
 	}
 
@@ -1176,8 +1186,9 @@ func (u *nutritionUseCase) AnalyzeMeal(ctx context.Context, userID uuid.UUID, re
 }
 
 func (u *nutritionUseCase) analyzeMealFromCatalog(ctx context.Context, userID uuid.UUID, req *domain.AnalyzeMealRequest) *domain.AnalyzeMealResponse {
-	userProfile, _ := u.userRepo.GetByID(ctx, userID)
 	violations := make([]domain.MealViolation, 0)
+	var enrichment *domain.MealEnrichment
+	foods := make([]domain.Food, 0, len(req.Candidate.FoodIDs))
 
 	for _, foodID := range req.Candidate.FoodIDs {
 		parsedID, err := uuid.Parse(foodID)
@@ -1188,12 +1199,25 @@ func (u *nutritionUseCase) analyzeMealFromCatalog(ctx context.Context, userID uu
 		if err != nil || food == nil {
 			return nil
 		}
-		if !plannerFoodAllowedByProfile(*food, userProfile) {
+		foods = append(foods, *food)
+	}
+
+	userProfile, _ := u.userRepo.GetByID(ctx, userID)
+	for _, food := range foods {
+		foodID := food.ID.String()
+		foodEnrichment := enrichCatalogFood(food)
+		u.persistEstimatedServingSize(ctx, food, foodEnrichment)
+		if enrichment == nil {
+			enrichment = foodEnrichment
+		}
+		violations = append(violations, ingredientProfileViolations(foodID, food, foodEnrichment, userProfile)...)
+
+		if len(foodEnrichment.Ingredients) == 0 && !plannerFoodAllowedByProfile(food, userProfile) {
 			violations = append(violations, domain.MealViolation{
 				ViolationType:    "local_profile_constraint",
-				Description:      fmt.Sprintf("%s conflicts with your dietary profile", nonEmptyPlanner(food.Name, food.NameEn, foodID)),
+				Description:      fmt.Sprintf("%s conflicts with your dietary profile", nonEmptyPlanner(food.Name, food.NameEn, food.ID.String())),
 				Severity:         "CRITICAL",
-				OffendingFoodIDs: []string{foodID},
+				OffendingFoodIDs: []string{food.ID.String()},
 			})
 		}
 	}
@@ -1218,10 +1242,160 @@ func (u *nutritionUseCase) analyzeMealFromCatalog(ctx context.Context, userID uu
 			MicronutrientScore: 1,
 			ConstraintScore:    boolScore(safe),
 		},
+		Enrichment:       enrichment,
 		Violations:       violations,
 		Fixes:            []domain.MealFixSuggestion{},
 		SafeAlternatives: []domain.MealFixSuggestion{},
 	})
+}
+
+func (u *nutritionUseCase) persistEstimatedServingSize(ctx context.Context, food domain.Food, enrichment *domain.MealEnrichment) {
+	if enrichment == nil || enrichment.EstimatedTotalWeightG <= 100 {
+		return
+	}
+	current := strings.ToLower(strings.TrimSpace(food.ServingSize))
+	if current != "" && current != "100g" && current != "100 g" {
+		return
+	}
+	servingSize := fmt.Sprintf("%.0fg", enrichment.EstimatedTotalWeightG)
+	if err := u.repo.UpdateFoodServingSize(ctx, food.ID, servingSize); err != nil {
+		log.Printf("[MealEnrichment] failed to persist serving size food=%s serving=%s err=%v", food.ID, servingSize, err)
+	}
+}
+
+func enrichCatalogFood(food domain.Food) *domain.MealEnrichment {
+	name := nonEmptyPlanner(food.NameVi, food.Name, food.NameEn)
+	terms := strings.ToLower(strings.Join([]string{food.Name, food.NameEn, food.NameVi}, " "))
+	terms = strings.ReplaceAll(terms, "phở", "pho")
+
+	enrichment := &domain.MealEnrichment{
+		DishName:              name,
+		EstimatedTotalWeightG: 100,
+		Ingredients:           []domain.MealIngredientEstimate{},
+		Source:                "catalog_rule_fallback",
+		Confidence:            0.75,
+	}
+
+	switch {
+	case containsPlannerTerm(terms, "pho thin", "pho bo", "phở bò", "rice noodle with beef"):
+		enrichment.DishName = nonEmptyPlanner(food.NameVi, "Pho bo")
+		enrichment.EstimatedTotalWeightG = 650
+		enrichment.Ingredients = []domain.MealIngredientEstimate{
+			{Name: "rice noodles", WeightG: 250},
+			{Name: "beef", WeightG: 120},
+			{Name: "beef broth", WeightG: 250},
+			{Name: "bean sprouts", WeightG: 20},
+			{Name: "herbs", WeightG: 10},
+		}
+		enrichment.Confidence = 0.9
+	case containsPlannerTerm(terms, "pho ga", "phở gà", "rice noodle with chicken", "sliced-chicken noodle soup"):
+		enrichment.DishName = nonEmptyPlanner(food.NameVi, "Pho ga")
+		enrichment.EstimatedTotalWeightG = 650
+		enrichment.Ingredients = []domain.MealIngredientEstimate{
+			{Name: "rice noodles", WeightG: 250},
+			{Name: "chicken", WeightG: 120},
+			{Name: "chicken broth", WeightG: 250},
+			{Name: "bean sprouts", WeightG: 20},
+			{Name: "herbs", WeightG: 10},
+		}
+		enrichment.Confidence = 0.9
+	case containsPlannerTerm(terms, "pho", "phở"):
+		enrichment.DishName = nonEmptyPlanner(food.NameVi, food.Name, "Pho")
+		enrichment.EstimatedTotalWeightG = 650
+		enrichment.Ingredients = []domain.MealIngredientEstimate{
+			{Name: "rice noodles", WeightG: 250},
+			{Name: "broth", WeightG: 250},
+			{Name: "herbs", WeightG: 20},
+		}
+		enrichment.Confidence = 0.65
+	case containsPlannerTerm(terms, "beef"):
+		enrichment.Ingredients = []domain.MealIngredientEstimate{{Name: "beef", WeightG: 100}}
+	case containsPlannerTerm(terms, "chicken"):
+		enrichment.Ingredients = []domain.MealIngredientEstimate{{Name: "chicken", WeightG: 100}}
+	case containsPlannerTerm(terms, "pork"):
+		enrichment.Ingredients = []domain.MealIngredientEstimate{{Name: "pork", WeightG: 100}}
+	case containsPlannerTerm(terms, "shrimp", "shellfish"):
+		enrichment.Ingredients = []domain.MealIngredientEstimate{{Name: "shrimp", WeightG: 100}}
+	case containsPlannerTerm(terms, "fish", "seafood"):
+		enrichment.Ingredients = []domain.MealIngredientEstimate{{Name: "fish", WeightG: 100}}
+	}
+
+	return enrichment
+}
+
+func ingredientProfileViolations(foodID string, food domain.Food, enrichment *domain.MealEnrichment, user *domain.User) []domain.MealViolation {
+	if user == nil || enrichment == nil {
+		return nil
+	}
+	terms := strings.ToLower(strings.Join([]string{food.Name, food.NameEn, food.NameVi, ingredientNames(enrichment.Ingredients)}, " "))
+	violations := make([]domain.MealViolation, 0)
+
+	diet := strings.ToLower(strings.TrimSpace(user.DietaryPreference))
+	if diet == "vegan" && containsPlannerTerm(terms, "beef", "chicken", "pork", "fish", "shrimp", "seafood", "shellfish", "meat", "egg", "milk", "cheese", "dairy", "broth") {
+		violations = append(violations, domain.MealViolation{
+			ViolationType:    "diet_vegan",
+			Description:      fmt.Sprintf("%s contains animal-derived ingredients: %s", enrichment.DishName, offendingIngredients(enrichment.Ingredients, "beef", "chicken", "pork", "fish", "shrimp", "broth", "egg", "milk", "cheese")),
+			Severity:         "CRITICAL",
+			OffendingFoodIDs: []string{foodID},
+		})
+	}
+	if diet == "vegetarian" && containsPlannerTerm(terms, "beef", "chicken", "pork", "fish", "shrimp", "seafood", "shellfish", "meat") {
+		violations = append(violations, domain.MealViolation{
+			ViolationType:    "diet_vegetarian",
+			Description:      fmt.Sprintf("%s contains meat or seafood ingredients: %s", enrichment.DishName, offendingIngredients(enrichment.Ingredients, "beef", "chicken", "pork", "fish", "shrimp", "seafood")),
+			Severity:         "CRITICAL",
+			OffendingFoodIDs: []string{foodID},
+		})
+	}
+
+	for _, allergy := range splitPlannerCSV(user.Allergies) {
+		if allergy == "" {
+			continue
+		}
+		if allergy == "seafood" || allergy == "shellfish" {
+			if containsPlannerTerm(terms, allergy, "shrimp", "fish", "crab", "lobster", "clam", "oyster") {
+				violations = append(violations, domain.MealViolation{
+					ViolationType:    "allergy_" + allergy,
+					Description:      fmt.Sprintf("%s may violate your %s allergy", enrichment.DishName, allergy),
+					Severity:         "CRITICAL",
+					OffendingFoodIDs: []string{foodID},
+				})
+			}
+			continue
+		}
+		if strings.Contains(terms, allergy) {
+			violations = append(violations, domain.MealViolation{
+				ViolationType:    "allergy_" + allergy,
+				Description:      fmt.Sprintf("%s contains or may contain %s", enrichment.DishName, allergy),
+				Severity:         "CRITICAL",
+				OffendingFoodIDs: []string{foodID},
+			})
+		}
+	}
+
+	return violations
+}
+
+func ingredientNames(ingredients []domain.MealIngredientEstimate) string {
+	names := make([]string, 0, len(ingredients))
+	for _, ingredient := range ingredients {
+		names = append(names, ingredient.Name)
+	}
+	return strings.Join(names, " ")
+}
+
+func offendingIngredients(ingredients []domain.MealIngredientEstimate, needles ...string) string {
+	matches := make([]string, 0)
+	for _, ingredient := range ingredients {
+		lower := strings.ToLower(ingredient.Name)
+		if containsPlannerTerm(lower, needles...) {
+			matches = append(matches, ingredient.Name)
+		}
+	}
+	if len(matches) == 0 {
+		return "animal-derived ingredients"
+	}
+	return strings.Join(matches, ", ")
 }
 
 func boolScore(value bool) float64 {

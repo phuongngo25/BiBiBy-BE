@@ -163,6 +163,13 @@ func (r *postgresNutritionRepository) UpsertFoods(ctx context.Context, foods []d
 		Create(&foods).Error
 }
 
+func (r *postgresNutritionRepository) UpdateFoodServingSize(ctx context.Context, foodID uuid.UUID, servingSize string) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.Food{}).
+		Where("id = ?", foodID).
+		Update("serving_size", servingSize).Error
+}
+
 // LogMeal inserts a MealLog record into the database.
 func (r *postgresNutritionRepository) LogMeal(ctx context.Context, log *domain.MealLog) error {
 	return r.db.WithContext(ctx).Create(log).Error

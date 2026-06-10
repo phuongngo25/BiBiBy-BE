@@ -217,6 +217,19 @@ type MealEvidencePath struct {
 	Nodes           []string `json:"nodes"`
 }
 
+type MealIngredientEstimate struct {
+	Name    string  `json:"name"`
+	WeightG float64 `json:"weight_g"`
+}
+
+type MealEnrichment struct {
+	DishName              string                   `json:"dish_name"`
+	EstimatedTotalWeightG float64                  `json:"estimated_total_weight_g"`
+	Ingredients           []MealIngredientEstimate `json:"ingredients"`
+	Source                string                   `json:"source"`
+	Confidence            float64                  `json:"confidence"`
+}
+
 type MealFixImpact struct {
 	SafetyDelta   float64 `json:"safety_delta"`
 	ProteinDelta  float64 `json:"protein_delta"`
@@ -239,6 +252,7 @@ type AnalyzeMealResponse struct {
 	Score            MealScore           `json:"score"`
 	Violations       []MealViolation     `json:"violations"`
 	EvidencePath     []MealEvidencePath  `json:"evidencePath"`
+	Enrichment       *MealEnrichment     `json:"enrichment,omitempty"`
 	Fixes            []MealFixSuggestion `json:"fixes"`
 	SafeAlternatives []MealFixSuggestion `json:"safeAlternatives"`
 }

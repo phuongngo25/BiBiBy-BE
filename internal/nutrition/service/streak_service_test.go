@@ -152,6 +152,9 @@ func (m *mockNutritionRepoForStreak) CreateFood(ctx context.Context, food *domai
 func (m *mockNutritionRepoForStreak) UpsertFoods(ctx context.Context, foods []domain.Food) error {
 	return nil
 }
+func (m *mockNutritionRepoForStreak) UpdateFoodServingSize(ctx context.Context, foodID uuid.UUID, servingSize string) error {
+	return nil
+}
 func (m *mockNutritionRepoForStreak) LogMeal(ctx context.Context, log *domain.MealLog) error {
 	return nil
 }
@@ -187,7 +190,7 @@ func TestStreakEvaluation_UnboundedScanAndSelfHealing(t *testing.T) {
 	// Create historical data
 	// Let's seed 10 days of perfect history starting from 2026-05-23 local up to 2026-06-01 local.
 	firstDateLocal := time.Date(2026, 5, 23, 0, 0, 0, 0, loc)
-	
+
 	snapshots := make(map[time.Time]domain.DailyHealthSnapshot)
 	consumed := make(map[time.Time]int)
 	water := make(map[time.Time]int)
@@ -238,7 +241,7 @@ func TestStreakEvaluation_UnboundedScanAndSelfHealing(t *testing.T) {
 	// Break the streak in the middle (5 days ago: 2026-05-28).
 	brokenDayLocal := time.Date(2026, 5, 28, 0, 0, 0, 0, loc)
 	brokenDayUTC := time.Date(brokenDayLocal.Year(), brokenDayLocal.Month(), brokenDayLocal.Day(), 0, 0, 0, 0, time.UTC)
-	
+
 	// Set calorie intake to 0 on that day (fails the 0.7 * target limit)
 	nutriRepo.consumed[brokenDayUTC] = 0
 
@@ -263,7 +266,7 @@ func TestStreakEvaluation_UnboundedScanAndSelfHealing(t *testing.T) {
 
 func TestStreakEvaluation_TimezoneSafety(t *testing.T) {
 	userID := uuid.New()
-	
+
 	// Let's verify a log event at 00:15 local time under Asia/Ho_Chi_Minh (UTC+7).
 	// 00:15 local on 2026-06-02 corresponds to 17:15 UTC on 2026-06-01.
 	// The evaluation must map to local day 2026-06-02.

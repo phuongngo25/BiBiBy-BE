@@ -149,8 +149,11 @@ func (m *mockNutritionRepo) GetFoodByID(_ context.Context, _ uuid.UUID) (*domain
 func (m *mockNutritionRepo) GetRandomFoods(_ context.Context, _ int) ([]domain.Food, error) {
 	return nil, nil
 }
-func (m *mockNutritionRepo) CreateFood(_ context.Context, _ *domain.Food) error { return nil }
+func (m *mockNutritionRepo) CreateFood(_ context.Context, _ *domain.Food) error   { return nil }
 func (m *mockNutritionRepo) UpsertFoods(_ context.Context, _ []domain.Food) error { return nil }
+func (m *mockNutritionRepo) UpdateFoodServingSize(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
 func (m *mockNutritionRepo) LogMeal(_ context.Context, _ *domain.MealLog) error { return nil }
 func (m *mockNutritionRepo) GetDailyLogs(_ context.Context, _ uuid.UUID, _ time.Time) ([]domain.MealLog, error) {
 	return m.logs, nil
@@ -191,12 +194,19 @@ func (m *mockNutritionRepo) GetWaterRange(ctx context.Context, userID uuid.UUID,
 
 type mockWorkoutRepo struct{}
 
-func (m *mockWorkoutRepo) GetExercisesByMuscle(ctx context.Context, muscle string) ([]domain.Exercise, error) { return nil, nil }
-func (m *mockWorkoutRepo) UpsertExercises(ctx context.Context, exercises []domain.Exercise) error { return nil }
-func (m *mockWorkoutRepo) CountByMuscle(ctx context.Context, muscle string) (int64, error) { return 0, nil }
+func (m *mockWorkoutRepo) GetExercisesByMuscle(ctx context.Context, muscle string) ([]domain.Exercise, error) {
+	return nil, nil
+}
+func (m *mockWorkoutRepo) UpsertExercises(ctx context.Context, exercises []domain.Exercise) error {
+	return nil
+}
+func (m *mockWorkoutRepo) CountByMuscle(ctx context.Context, muscle string) (int64, error) {
+	return 0, nil
+}
 func (m *mockWorkoutRepo) LogWorkout(ctx context.Context, log *domain.WorkoutLog) error { return nil }
-func (m *mockWorkoutRepo) GetDailyBurnedCalories(ctx context.Context, userID uuid.UUID, date time.Time) (float64, error) { return 0, nil }
-
+func (m *mockWorkoutRepo) GetDailyBurnedCalories(ctx context.Context, userID uuid.UUID, date time.Time) (float64, error) {
+	return 0, nil
+}
 
 func makeUC(user *domain.User, dri *domain.DRI, driErr error) domain.UserUseCase {
 	return makeUCWithLogs(user, dri, driErr, nil)
@@ -214,11 +224,11 @@ func makeUCWithLogs(user *domain.User, dri *domain.DRI, driErr error, logs []dom
 
 func TestRegister_WeakPassword(t *testing.T) {
 	uc := makeUC(&domain.User{}, makeDRI(), nil)
-	
+
 	testCases := []string{
-		"short1A",      // less than 8 chars
-		"nouppercase1", // no uppercase
-		"NOLOWERCASE1", // no lowercase
+		"short1A",       // less than 8 chars
+		"nouppercase1",  // no uppercase
+		"NOLOWERCASE1",  // no lowercase
 		"NoNumbersHere", // no numbers
 	}
 
@@ -254,12 +264,12 @@ func TestRegister_StrongPassword_Success(t *testing.T) {
 func TestRefreshTokens_SuccessAndRevocation(t *testing.T) {
 	userID := uuid.New()
 	uc := makeUC(&domain.User{ID: userID, Username: "refreshuser"}, makeDRI(), nil)
-	
+
 	// Create a valid refresh token directly in mock
 	validRawToken := "dummy-refresh-token"
 	validHash := crypto.HashToken(validRawToken)
 	famID := uuid.New()
-	
+
 	mockRefreshTokens[validHash] = &domain.RefreshToken{
 		ID:        uuid.New(),
 		UserID:    userID,
@@ -289,10 +299,10 @@ func TestRefreshTokens_SuccessAndRevocation(t *testing.T) {
 func TestRefreshTokens_Expired(t *testing.T) {
 	userID := uuid.New()
 	uc := makeUC(&domain.User{ID: userID}, makeDRI(), nil)
-	
+
 	expiredRawToken := "expired-token"
 	expiredHash := crypto.HashToken(expiredRawToken)
-	
+
 	mockRefreshTokens[expiredHash] = &domain.RefreshToken{
 		ID:        uuid.New(),
 		UserID:    userID,
@@ -309,19 +319,17 @@ func TestRefreshTokens_Expired(t *testing.T) {
 	}
 }
 
-
-
 func TestGetTargets_Success_MaleAdult(t *testing.T) {
 	dob := time.Date(1998, 1, 1, 0, 0, 0, 0, time.UTC)
 	id := uuid.New()
 	user := &domain.User{
-		ID:           id,
-		Gender:       "male",
-		DOB:          &dob,
-		WeightKg:     75,
-		HeightCm:     175,
+		ID:            id,
+		Gender:        "male",
+		DOB:           &dob,
+		WeightKg:      75,
+		HeightCm:      175,
 		ActivityLevel: "moderate",
-		TDEE:         2500,
+		TDEE:          2500,
 	}
 	uc := makeUC(user, makeDRI(), nil)
 

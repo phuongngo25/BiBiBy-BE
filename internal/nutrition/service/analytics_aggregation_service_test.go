@@ -34,9 +34,12 @@ func (m *mockNutritionRepo) SearchFoodsByNutrients(ctx context.Context, minProte
 func (m *mockNutritionRepo) GetRandomFoods(ctx context.Context, limit int) ([]domain.Food, error) {
 	return nil, nil
 }
-func (m *mockNutritionRepo) CreateFood(ctx context.Context, food *domain.Food) error { return nil }
+func (m *mockNutritionRepo) CreateFood(ctx context.Context, food *domain.Food) error    { return nil }
 func (m *mockNutritionRepo) UpsertFoods(ctx context.Context, foods []domain.Food) error { return nil }
-func (m *mockNutritionRepo) LogMeal(ctx context.Context, log *domain.MealLog) error   { return nil }
+func (m *mockNutritionRepo) UpdateFoodServingSize(ctx context.Context, foodID uuid.UUID, servingSize string) error {
+	return nil
+}
+func (m *mockNutritionRepo) LogMeal(ctx context.Context, log *domain.MealLog) error { return nil }
 func (m *mockNutritionRepo) GetDailyLogs(ctx context.Context, userID uuid.UUID, date time.Time) ([]domain.MealLog, error) {
 	return nil, nil
 }
@@ -98,7 +101,9 @@ func (m *mockUserRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.User,
 func (m *mockUserRepo) UpdateProfile(ctx context.Context, id uuid.UUID, req *domain.UpdateProfileRequest) error {
 	return nil
 }
-func (m *mockUserRepo) SaveRefreshToken(ctx context.Context, rt *domain.RefreshToken) error { return nil }
+func (m *mockUserRepo) SaveRefreshToken(ctx context.Context, rt *domain.RefreshToken) error {
+	return nil
+}
 func (m *mockUserRepo) GetRefreshTokenByHash(ctx context.Context, hash string) (*domain.RefreshToken, error) {
 	return nil, nil
 }

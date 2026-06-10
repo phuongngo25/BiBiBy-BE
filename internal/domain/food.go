@@ -198,6 +198,7 @@ type NutritionRepository interface {
 	GetRandomFoods(ctx context.Context, limit int) ([]Food, error)
 	CreateFood(ctx context.Context, food *Food) error
 	UpsertFoods(ctx context.Context, foods []Food) error
+	UpdateFoodServingSize(ctx context.Context, foodID uuid.UUID, servingSize string) error
 	LogMeal(ctx context.Context, log *MealLog) error
 	GetDailyLogs(ctx context.Context, userID uuid.UUID, date time.Time) ([]MealLog, error)
 	// GetWeeklyConsumed returns per-day SUM(calories_consumed) from food_logs for the last n days.

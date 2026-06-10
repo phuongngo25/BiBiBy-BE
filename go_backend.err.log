@@ -1,69 +1,48 @@
-2026/06/09 07:26:12 WARNING: GOOGLE_CLIENT_ID not set. Google Sign-In verification may fail.
-2026/06/09 07:26:12 WARNING: ALLOWED_ORIGINS not set. Defaulting to localhost origins.
-2026/06/09 07:26:12 [Migrations] Running explicit migration: 001_add_timezone_to_users.sql
-2026/06/09 07:26:13 [Migrations] Running explicit migration: 002_create_daily_health_snapshots.sql
-2026/06/09 07:26:13 [Migrations] Running explicit migration: 003_create_user_streaks.sql
-2026/06/09 07:26:13 [Migrations] Running explicit migration: 004_create_user_achievements.sql
-2026/06/09 07:26:13 [Seeder] Food table already has 9011 rows; checking missing slices
-2026/06/09 07:26:13 [Seeder] VFA already has 853 rows
-2026/06/09 07:26:14 [Seeder] Seeded 1250 VFA_DISH
-2026/06/09 07:26:14 [Seeder] USDA already has 8158 rows
-2026/06/09 07:26:14 [Seeder] Seeded 6 DRIs
-2026/06/09 07:26:14 MET Seeder Success: Upserted 1012 activities
-2026/06/09 07:26:14 [Database] Successfully connected to Redis at localhost:6379
-2026/06/09 07:26:19 [SRE] CV Client unavailable: failed to connect to AI microservice at localhost:50052: context deadline exceeded
-2026/06/09 07:26:19 NutriX Server starting on port :8080
-2026/06/09 07:30:20 [DAILY_PLAN] requestedDate=2026-06-09
-2026/06/09 07:30:20 [DAILY_PLAN] queryStart=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:30:20 [DAILY_PLAN] queryEnd=2026-06-10 00:00:00 +0000 UTC
-2026/06/09 07:30:20 [DAILY_PLAN] mealsReturned=1
-2026/06/09 07:30:20 [DAILY_PLAN] meal=Leavening agents, baking powder, double-acting, straight phosphate consumedDate=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:30:20 [DAILY_PLAN] requestedDate=2026-06-09
-2026/06/09 07:30:20 [DAILY_PLAN] queryStart=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:30:20 [DAILY_PLAN] queryEnd=2026-06-10 00:00:00 +0000 UTC
-2026/06/09 07:30:20 [DAILY_PLAN] mealsReturned=1
-2026/06/09 07:30:20 [DAILY_PLAN] meal=Leavening agents, baking powder, double-acting, straight phosphate consumedDate=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:30:20 [DAILY_PLAN] requestedDate=2026-06-09
-2026/06/09 07:30:20 [DAILY_PLAN] queryStart=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:30:20 [DAILY_PLAN] queryEnd=2026-06-10 00:00:00 +0000 UTC
-2026/06/09 07:30:20 [DAILY_PLAN] requestedDate=2026-06-09
-2026/06/09 07:30:20 [DAILY_PLAN] queryStart=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:30:20 [DAILY_PLAN] queryEnd=2026-06-10 00:00:00 +0000 UTC
-2026/06/09 07:30:20 [DAILY_PLAN] mealsReturned=1
-2026/06/09 07:30:20 [DAILY_PLAN] meal=Leavening agents, baking powder, double-acting, straight phosphate consumedDate=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:30:20 [DAILY_PLAN] mealsReturned=1
-2026/06/09 07:30:20 [DAILY_PLAN] meal=Leavening agents, baking powder, double-acting, straight phosphate consumedDate=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:30:35 [SearchFoods] KG Cache MISS for 50 foods -> calling AI Server
-2026/06/09 07:30:35 [SearchFoods] KG Enrichment failed: feature unavailable in current API version
-2026/06/09 07:30:54 [DAILY_PLAN] requestedDate=2026-06-09
-2026/06/09 07:30:54 [DAILY_PLAN] queryStart=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:30:54 [DAILY_PLAN] queryEnd=2026-06-10 00:00:00 +0000 UTC
-2026/06/09 07:30:54 [DAILY_PLAN] mealsReturned=2
-2026/06/09 07:30:54 [DAILY_PLAN] meal=Leavening agents, baking powder, double-acting, straight phosphate consumedDate=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:30:54 [DAILY_PLAN] meal=Pho Thin consumedDate=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:30:54 [DAILY_PLAN] requestedDate=2026-06-09
-2026/06/09 07:30:54 [DAILY_PLAN] queryStart=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:30:54 [DAILY_PLAN] queryEnd=2026-06-10 00:00:00 +0000 UTC
-2026/06/09 07:30:54 [DAILY_PLAN] mealsReturned=2
-2026/06/09 07:30:54 [DAILY_PLAN] meal=Leavening agents, baking powder, double-acting, straight phosphate consumedDate=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:30:54 [DAILY_PLAN] meal=Pho Thin consumedDate=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:31:19 [SearchFoods] KG Cache MISS for 50 foods -> calling AI Server
-2026/06/09 07:31:19 [SearchFoods] KG Enrichment failed: feature unavailable in current API version
-2026/06/09 07:47:18 [DAILY_PLAN] requestedDate=2026-06-09
-2026/06/09 07:47:18 [DAILY_PLAN] queryStart=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:47:18 [DAILY_PLAN] queryEnd=2026-06-10 00:00:00 +0000 UTC
-2026/06/09 07:47:18 [DAILY_PLAN] mealsReturned=2
-2026/06/09 07:47:18 [DAILY_PLAN] meal=Leavening agents, baking powder, double-acting, straight phosphate consumedDate=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:47:18 [DAILY_PLAN] meal=Pho Thin consumedDate=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:47:25 [DAILY_PLAN] requestedDate=2026-06-09
-2026/06/09 07:47:25 [DAILY_PLAN] queryStart=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:47:25 [DAILY_PLAN] queryEnd=2026-06-10 00:00:00 +0000 UTC
-2026/06/09 07:47:25 [DAILY_PLAN] mealsReturned=2
-2026/06/09 07:47:25 [DAILY_PLAN] meal=Leavening agents, baking powder, double-acting, straight phosphate consumedDate=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:47:25 [DAILY_PLAN] meal=Pho Thin consumedDate=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:47:35 [DAILY_PLAN] requestedDate=2026-06-09
-2026/06/09 07:47:35 [DAILY_PLAN] queryStart=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:47:35 [DAILY_PLAN] queryEnd=2026-06-10 00:00:00 +0000 UTC
-2026/06/09 07:47:35 [DAILY_PLAN] mealsReturned=2
-2026/06/09 07:47:35 [DAILY_PLAN] meal=Leavening agents, baking powder, double-acting, straight phosphate consumedDate=2026-06-09 00:00:00 +0000 UTC
-2026/06/09 07:47:35 [DAILY_PLAN] meal=Pho Thin consumedDate=2026-06-09 00:00:00 +0000 UTC
+2026/06/09 08:34:08 WARNING: GOOGLE_CLIENT_ID not set. Google Sign-In verification may fail.
+2026/06/09 08:34:08 WARNING: ALLOWED_ORIGINS not set. Defaulting to localhost origins.
+2026/06/09 08:34:09 [Migrations] Running explicit migration: 001_add_timezone_to_users.sql
+2026/06/09 08:34:09 [Migrations] Running explicit migration: 002_create_daily_health_snapshots.sql
+2026/06/09 08:34:09 [Migrations] Running explicit migration: 003_create_user_streaks.sql
+2026/06/09 08:34:09 [Migrations] Running explicit migration: 004_create_user_achievements.sql
+2026/06/09 08:34:10 [Seeder] Food table already has 10261 rows; checking missing slices
+2026/06/09 08:34:10 [Seeder] VFA already has 853 rows
+2026/06/09 08:34:10 [Seeder] VFA_DISH already has 1250 rows
+2026/06/09 08:34:10 [Seeder] USDA already has 8158 rows
+2026/06/09 08:34:10 [Seeder] DRIs already has 6 rows
+2026/06/09 08:34:10 MET Seeder Success: Upserted 1012 activities
+2026/06/09 08:34:10 [Database] Successfully connected to Redis at localhost:6379
+2026/06/09 08:34:15 [SRE] CV Client unavailable: failed to connect to AI microservice at localhost:50052: context deadline exceeded
+2026/06/09 08:34:15 NutriX Server starting on port :8080
+2026/06/09 08:40:03 [DAILY_PLAN] requestedDate=2026-06-09
+2026/06/09 08:40:03 [DAILY_PLAN] queryStart=2026-06-09 00:00:00 +0000 UTC
+2026/06/09 08:40:03 [DAILY_PLAN] queryEnd=2026-06-10 00:00:00 +0000 UTC
+2026/06/09 08:40:03 [DAILY_PLAN] mealsReturned=2
+2026/06/09 08:40:03 [DAILY_PLAN] meal=Leavening agents, baking powder, double-acting, straight phosphate consumedDate=2026-06-09 00:00:00 +0000 UTC
+2026/06/09 08:40:03 [DAILY_PLAN] meal=Pho Thin consumedDate=2026-06-09 00:00:00 +0000 UTC
+2026/06/09 08:40:03 [DAILY_PLAN] requestedDate=2026-06-09
+2026/06/09 08:40:03 [DAILY_PLAN] queryStart=2026-06-09 00:00:00 +0000 UTC
+2026/06/09 08:40:03 [DAILY_PLAN] queryEnd=2026-06-10 00:00:00 +0000 UTC
+2026/06/09 08:40:03 [DAILY_PLAN] mealsReturned=2
+2026/06/09 08:40:03 [DAILY_PLAN] meal=Leavening agents, baking powder, double-acting, straight phosphate consumedDate=2026-06-09 00:00:00 +0000 UTC
+2026/06/09 08:40:03 [DAILY_PLAN] meal=Pho Thin consumedDate=2026-06-09 00:00:00 +0000 UTC
+2026/06/09 08:40:03 [DAILY_PLAN] requestedDate=2026-06-09
+2026/06/09 08:40:03 [DAILY_PLAN] queryStart=2026-06-09 00:00:00 +0000 UTC
+2026/06/09 08:40:03 [DAILY_PLAN] queryEnd=2026-06-10 00:00:00 +0000 UTC
+2026/06/09 08:40:03 [DAILY_PLAN] mealsReturned=2
+2026/06/09 08:40:03 [DAILY_PLAN] meal=Leavening agents, baking powder, double-acting, straight phosphate consumedDate=2026-06-09 00:00:00 +0000 UTC
+2026/06/09 08:40:03 [DAILY_PLAN] meal=Pho Thin consumedDate=2026-06-09 00:00:00 +0000 UTC
+2026/06/09 08:40:03 [DAILY_PLAN] requestedDate=2026-06-09
+2026/06/09 08:40:03 [DAILY_PLAN] queryStart=2026-06-09 00:00:00 +0000 UTC
+2026/06/09 08:40:03 [DAILY_PLAN] queryEnd=2026-06-10 00:00:00 +0000 UTC
+2026/06/09 08:40:03 [DAILY_PLAN] mealsReturned=2
+2026/06/09 08:40:03 [DAILY_PLAN] meal=Leavening agents, baking powder, double-acting, straight phosphate consumedDate=2026-06-09 00:00:00 +0000 UTC
+2026/06/09 08:40:03 [DAILY_PLAN] meal=Pho Thin consumedDate=2026-06-09 00:00:00 +0000 UTC
+2026/06/09 08:41:07 [SearchFoods] KG Cache MISS for 50 foods -> calling AI Server
+2026/06/09 08:41:07 [SearchFoods] KG Enrichment failed: feature unavailable in current API version
+redis: 2026/06/09 08:42:20 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
+redis: 2026/06/09 08:42:21 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
+redis: 2026/06/09 08:42:21 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
+2026/06/09 08:42:24 [Server] Shutdown signal received. Draining active connections...
+2026/06/09 08:42:24 [Server] Database connection closed.
+2026/06/09 08:42:24 [Server] Redis connection closed.
+2026/06/09 08:42:24 [Server] Shutdown complete. Goodbye!

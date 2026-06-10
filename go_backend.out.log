@@ -41,3 +41,9 @@
 [GIN-debug] GET    /api/v1/exercises         --> nutrix-backend/internal/workout/delivery.(*WorkoutHandler).GetExercisesByBodyParts-fm (9 handlers)
 [GIN-debug] GET    /api/v1/exercises/:id     --> nutrix-backend/internal/workout/delivery.(*WorkoutHandler).GetExerciseByID-fm (9 handlers)
 [GIN-debug] POST   /api/v1/workouts/log      --> nutrix-backend/internal/workout/delivery.(*WorkoutHandler).LogWorkout-fm (9 handlers)
+
+2026/06/09 08:35:13 [31;1mC:/Users/Tunnne/Downloads/code/go_backend/internal/user/repository/postgres_user.go:44 [35;1mERROR: duplicate key value violates unique constraint "idx_users_username" (SQLSTATE 23505)
+[0m[33m[52.790ms] [34;1m[rows:0][0m INSERT INTO "users" ("username","email","password_hash","full_name","height_cm","weight_kg","dob","gender","activity_level","bmr","tdee","goal_type","timezone","weekly_calorie_budget","dietary_preference","allergies","allergies_bidx","medical_conditions","medical_conditions_bidx","created_at","updated_at") VALUES ('servingtest','serving_test_1780968913428@example.com','$2a$10$iJYadj/fGRYh/kdnEYAY9.AxPEFis0LVJ9ODM5pvViU9eJluDUJTe','',0,0,NULL,'','',0,0,'','UTC',0,'','','','','','2026-06-09 08:35:13.736','2026-06-09 08:35:13.736') RETURNING "id"
+
+2026/06/09 08:35:13 [31;1mC:/Users/Tunnne/Downloads/code/go_backend/internal/user/repository/postgres_user.go:55 [35;1mrecord not found
+[0m[33m[6.744ms] [34;1m[rows:0][0m SELECT * FROM "users" WHERE email = 'serving_test_1780968913428@example.com' ORDER BY "users"."id" LIMIT 1

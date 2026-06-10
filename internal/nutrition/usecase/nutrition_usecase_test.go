@@ -18,6 +18,7 @@ type mockNutritionRepo struct {
 	weeklyBurned     map[string]float64
 	waterAmount      int
 	waterDateQueried time.Time
+	foodsByID        map[uuid.UUID]domain.Food
 }
 
 func (m *mockNutritionRepo) GetMealLogForUpdate(ctx context.Context, userID uuid.UUID, logID uuid.UUID) (*domain.MealLog, error) {
@@ -29,6 +30,9 @@ func (m *mockNutritionRepo) UpdateMealLog(ctx context.Context, log *domain.MealL
 }
 
 func (m *mockNutritionRepo) GetFoodByID(ctx context.Context, id uuid.UUID) (*domain.Food, error) {
+	if food, ok := m.foodsByID[id]; ok {
+		return &food, nil
+	}
 	return nil, nil
 }
 func (m *mockNutritionRepo) WithTransaction(ctx context.Context, fn func(repo domain.NutritionRepository) error) error {
@@ -45,6 +49,13 @@ func (m *mockNutritionRepo) GetRandomFoods(ctx context.Context, limit int) ([]do
 }
 func (m *mockNutritionRepo) CreateFood(ctx context.Context, food *domain.Food) error { return nil }
 func (m *mockNutritionRepo) UpsertFoods(ctx context.Context, foods []domain.Food) error {
+	return nil
+}
+func (m *mockNutritionRepo) UpdateFoodServingSize(ctx context.Context, foodID uuid.UUID, servingSize string) error {
+	if food, ok := m.foodsByID[foodID]; ok {
+		food.ServingSize = servingSize
+		m.foodsByID[foodID] = food
+	}
 	return nil
 }
 func (m *mockNutritionRepo) LogMeal(ctx context.Context, log *domain.MealLog) error { return nil }
@@ -205,6 +216,50 @@ func TestGetDailyPlan_UsesUserTimezoneForWaterAggregation(t *testing.T) {
 	}
 	if nutriRepo.waterDateQueried.Format(time.RFC3339) != "2026-06-09T00:00:00+07:00" {
 		t.Fatalf("unexpected water date: %s", nutriRepo.waterDateQueried.Format(time.RFC3339))
+	}
+}
+
+func TestAnalyzeMeal_LocalEnrichmentRejectsVegetarianPhoBo(t *testing.T) {
+	ctx := context.Background()
+	userID := uuid.New()
+	foodID := uuid.New()
+	nutriRepo := &mockNutritionRepo{
+		foodsByID: map[uuid.UUID]domain.Food{
+			foodID: {
+				ID:     foodID,
+				Name:   "Pho Thin",
+				NameVi: "Pho Thin",
+				Source: "VFA_DISH",
+			},
+		},
+	}
+	userRepo := &mockUserRepo{user: &domain.User{
+		TDEE:              2000,
+		DietaryPreference: "vegetarian",
+	}}
+	uc := usecase.NewNutritionUseCase(nutriRepo, nil, nil, nil, &mockWorkoutRepo{}, userRepo, nil, nil, nil)
+
+	resp, err := uc.AnalyzeMeal(ctx, userID, &domain.AnalyzeMealRequest{
+		Candidate: domain.CandidateMeal{
+			MealID:   "manual-lunch",
+			FoodIDs:  []string{foodID.String()},
+			MealType: "lunch",
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected local validation without KG error, got %v", err)
+	}
+	if resp.Safe {
+		t.Fatalf("expected unsafe vegetarian Pho Thin response")
+	}
+	if resp.HighestRisk != "CRITICAL" {
+		t.Fatalf("expected CRITICAL, got %s", resp.HighestRisk)
+	}
+	if len(resp.Violations) == 0 || resp.Violations[0].ViolationType != "diet_vegetarian" {
+		t.Fatalf("expected diet_vegetarian violation, got %+v", resp.Violations)
+	}
+	if resp.Enrichment == nil || len(resp.Enrichment.Ingredients) == 0 {
+		t.Fatalf("expected ingredient enrichment, got %+v", resp.Enrichment)
 	}
 }
 
