@@ -5,33 +5,34 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 )
 
 // User represents the core domain entity for a NutriX platform user.
 // It combines authentication fields with biometric/health data.
 type User struct {
-	ID                uuid.UUID `json:"id"                  gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	Username          string    `json:"username"            gorm:"uniqueIndex;not null"`
-	Email             string    `json:"email"               gorm:"uniqueIndex;not null"`
-	Password          string    `json:"-"                   gorm:"column:password_hash;not null"`
-	FullName          string    `json:"full_name"`
-	HeightCm          float64   `json:"height_cm"`
-	WeightKg          float64   `json:"weight_kg"`
-	DOB               *time.Time `json:"dob"                gorm:"type:date"`
-	Gender            string    `json:"gender"`
-	ActivityLevel     ActivityLevel `json:"activity_level"`
-	BMR               float64   `json:"bmr"`
-	TDEE              float64   `json:"tdee"`
-	GoalType          GoalType    `json:"goal_type"`
-	Timezone          string    `json:"timezone"           gorm:"default:'UTC'"`
-	WeeklyCalorieBudget float64 `json:"weekly_calorie_budget"`
-	DietaryPreference string    `json:"dietary_preference"`
-	Allergies           string    `json:"allergies"           gorm:"type:text"`
-	AllergiesBidx       string    `json:"-"                   gorm:"index"`
-	MedicalConditions   string    `json:"medical_conditions"  gorm:"type:text"`
-	MedicalConditionsBidx string  `json:"-"                   gorm:"index"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	ID                    uuid.UUID     `json:"id"                  gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	Username              string        `json:"username"            gorm:"uniqueIndex;not null"`
+	Email                 string        `json:"email"               gorm:"uniqueIndex;not null"`
+	Password              string        `json:"-"                   gorm:"column:password_hash;not null"`
+	FullName              string        `json:"full_name"`
+	HeightCm              float64       `json:"height_cm"`
+	WeightKg              float64       `json:"weight_kg"`
+	DOB                   *time.Time    `json:"dob"                gorm:"type:date"`
+	Gender                string        `json:"gender"`
+	ActivityLevel         ActivityLevel `json:"activity_level"`
+	BMR                   float64       `json:"bmr"`
+	TDEE                  float64       `json:"tdee"`
+	GoalType              GoalType      `json:"goal_type"`
+	Timezone              string        `json:"timezone"           gorm:"default:'UTC'"`
+	WeeklyCalorieBudget   float64       `json:"weekly_calorie_budget"`
+	DietaryPreference     string        `json:"dietary_preference"`
+	Allergies             string        `json:"allergies"           gorm:"type:text"`
+	AllergiesBidx         string        `json:"-"                   gorm:"index"`
+	MedicalConditions     string        `json:"medical_conditions"  gorm:"type:text"`
+	MedicalConditionsBidx string        `json:"-"                   gorm:"index"`
+	CreatedAt             time.Time     `json:"created_at"`
+	UpdatedAt             time.Time     `json:"updated_at"`
 }
 
 // RefreshToken represents a long-lived token used to obtain new access tokens.
@@ -44,6 +45,22 @@ type RefreshToken struct {
 	Revoked             bool      `json:"revoked"                gorm:"default:false"`
 	ReplacedByTokenHash *string   `json:"-"`
 	CreatedAt           time.Time `json:"created_at"             gorm:"autoCreateTime"`
+}
+
+// UserPortfolio stores additional health-and-diet personalization that should
+// not overload the core auth/profile row.
+type UserPortfolio struct {
+	UserID                uuid.UUID                   `json:"user_id" gorm:"type:uuid;primaryKey;constraint:OnDelete:CASCADE;"`
+	PreferredCuisines     datatypes.JSONSlice[string] `json:"preferred_cuisines" gorm:"type:jsonb;default:'[]'"`
+	DislikedIngredients   datatypes.JSONSlice[string] `json:"disliked_ingredients" gorm:"type:jsonb;default:'[]'"`
+	ExcludedIngredients   datatypes.JSONSlice[string] `json:"excluded_ingredients" gorm:"type:jsonb;default:'[]'"`
+	MealSchedule          datatypes.JSONMap           `json:"meal_schedule" gorm:"type:jsonb;default:'{}'"`
+	DailyWaterTargetML    int                         `json:"daily_water_target_ml"`
+	CalorieTargetOverride *float64                    `json:"calorie_target_override"`
+	MacroSplitOverride    datatypes.JSONMap           `json:"macro_split_override" gorm:"type:jsonb;default:'{}'"`
+	Notes                 string                      `json:"notes" gorm:"type:text"`
+	CreatedAt             time.Time                   `json:"created_at"`
+	UpdatedAt             time.Time                   `json:"updated_at"`
 }
 
 // RegisterRequest is the input payload for a new user registration.
@@ -88,6 +105,7 @@ type UpdateProfileRequest struct {
 	HeightCm          *float64   `json:"height_cm"`
 	WeightKg          *float64   `json:"weight_kg"`
 	DateOfBirth       *string    `json:"date_of_birth"` // accept as plain "YYYY-MM-DD" or ISO string
+	DOBInput          *string    `json:"dob"`           // backward-compatible Flutter key
 	DOB               *time.Time `json:"-"`             // populated by handler after parsing
 	Gender            string     `json:"gender"`
 	ActivityLevel     string     `json:"activity_level"`
@@ -97,6 +115,45 @@ type UpdateProfileRequest struct {
 	MedicalConditions string     `json:"medical_conditions"`
 	BMR               *float64   `json:"-"`
 	TDEE              *float64   `json:"-"`
+}
+
+// UserPortfolioRequest updates optional personalization settings used by
+// planner, validation, and profile UI. Core health restrictions remain in User.
+type UserPortfolioRequest struct {
+	PreferredCuisines     []string       `json:"preferred_cuisines"`
+	DislikedIngredients   []string       `json:"disliked_ingredients"`
+	ExcludedIngredients   []string       `json:"excluded_ingredients"`
+	MealSchedule          map[string]any `json:"meal_schedule"`
+	DailyWaterTargetML    int            `json:"daily_water_target_ml"`
+	CalorieTargetOverride *float64       `json:"calorie_target_override"`
+	MacroSplitOverride    map[string]any `json:"macro_split_override"`
+	Notes                 string         `json:"notes"`
+}
+
+// UserPortfolioResponse combines the existing profile row with the optional
+// personalization row so clients can hydrate a single "portfolio" surface.
+type UserPortfolioResponse struct {
+	UserID                uuid.UUID      `json:"user_id"`
+	HeightCm              float64        `json:"height_cm"`
+	WeightKg              float64        `json:"weight_kg"`
+	DOB                   *time.Time     `json:"dob"`
+	Gender                string         `json:"gender"`
+	ActivityLevel         ActivityLevel  `json:"activity_level"`
+	BMR                   float64        `json:"bmr"`
+	TDEE                  float64        `json:"tdee"`
+	GoalType              GoalType       `json:"goal_type"`
+	DietaryPreference     string         `json:"dietary_preference"`
+	Allergies             string         `json:"allergies"`
+	MedicalConditions     string         `json:"medical_conditions"`
+	PreferredCuisines     []string       `json:"preferred_cuisines"`
+	DislikedIngredients   []string       `json:"disliked_ingredients"`
+	ExcludedIngredients   []string       `json:"excluded_ingredients"`
+	MealSchedule          map[string]any `json:"meal_schedule"`
+	DailyWaterTargetML    int            `json:"daily_water_target_ml"`
+	CalorieTargetOverride *float64       `json:"calorie_target_override"`
+	MacroSplitOverride    map[string]any `json:"macro_split_override"`
+	Notes                 string         `json:"notes"`
+	UpdatedAt             time.Time      `json:"updated_at"`
 }
 
 // UserRepository defines the data access boundary for the User entity.
@@ -114,6 +171,13 @@ type UserRepository interface {
 	RevokeFamily(ctx context.Context, familyID uuid.UUID) error
 }
 
+// UserPortfolioRepository isolates optional personalization persistence from
+// the core user profile repository.
+type UserPortfolioRepository interface {
+	GetPortfolio(ctx context.Context, userID uuid.UUID) (*UserPortfolio, error)
+	UpsertPortfolio(ctx context.Context, portfolio *UserPortfolio) error
+}
+
 // UserUseCase defines the application-level business logic boundary for user operations.
 type UserUseCase interface {
 	Register(ctx context.Context, req *RegisterRequest) (*AuthResponse, error)
@@ -122,6 +186,8 @@ type UserUseCase interface {
 	UpdateProfile(ctx context.Context, userID uuid.UUID, req *UpdateProfileRequest) error
 	GetProfile(ctx context.Context, userID uuid.UUID) (*User, error)
 	GetTargets(ctx context.Context, userID uuid.UUID) (*UserTargetsResponse, error)
+	GetPortfolio(ctx context.Context, userID uuid.UUID) (*UserPortfolioResponse, error)
+	UpdatePortfolio(ctx context.Context, userID uuid.UUID, req *UserPortfolioRequest) (*UserPortfolioResponse, error)
 }
 
 // ─── Nutritional Targets DTOs ─────────────────────────────────────────────────

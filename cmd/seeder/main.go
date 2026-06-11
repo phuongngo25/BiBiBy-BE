@@ -18,6 +18,10 @@ func main() {
 		log.Fatalf("Could not connect to the database: %v", err)
 	}
 
+	if err := pkgdb.RunMigrations(db); err != nil {
+		log.Fatalf("Could not run migrations: %v", err)
+	}
+
 	log.Println("Connected to Database. Starting seed process...")
 
 	if err := seeder.SeedBaseTruthData(db); err != nil {

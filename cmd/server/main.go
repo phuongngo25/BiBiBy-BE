@@ -102,6 +102,7 @@ func main() {
 	nutritionRepoInst := nutritionRepo.NewPostgresNutritionRepository(db)
 	driRepoInst := nutritionRepo.NewPostgresDRIRepository(db)
 	uRepo := userRepo.NewPostgresUserRepository(db, cfg.EncryptionKeys, cfg.ActiveKeyVersion, cfg.HMACKey)
+	userPortfolioRepoInst := userRepo.NewPostgresUserPortfolioRepository(db)
 	streakRepoInst := nutritionRepo.NewPostgresStreakRepository(db)
 	achievementRepoInst := nutritionRepo.NewPostgresAchievementRepository(db)
 
@@ -129,8 +130,8 @@ func main() {
 	// -------------------------------------------------------------------------
 	// 5. DEPENDENCY INJECTION — UseCases
 	// -------------------------------------------------------------------------
-	nutritionUCInst := nutritionUC.NewNutritionUseCase(nutritionRepoInst, streakRepoInst, achievementRepoInst, spoonClient, workoutRepoInst, uRepo, cvClient, kgClient, redisClient)
-	uUC := userUC.NewUserUseCase(uRepo, driRepoInst, nutritionRepoInst, workoutRepoInst, cfg.JWTSecret, cfg.JWTExpirationHours)
+	nutritionUCInst := nutritionUC.NewNutritionUseCase(nutritionRepoInst, streakRepoInst, achievementRepoInst, spoonClient, workoutRepoInst, uRepo, cvClient, kgClient, redisClient, userPortfolioRepoInst)
+	uUC := userUC.NewUserUseCase(uRepo, driRepoInst, nutritionRepoInst, workoutRepoInst, cfg.JWTSecret, cfg.JWTExpirationHours, userPortfolioRepoInst)
 	workoutUCInst := workoutUC.NewWorkoutUseCase(workoutRepoInst, exerciseClient, uRepo, streakSvc)
 
 	// Gamification UseCase

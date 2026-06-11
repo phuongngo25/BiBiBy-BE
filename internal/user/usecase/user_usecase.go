@@ -22,6 +22,7 @@ import (
 
 type userUseCase struct {
 	repo               domain.UserRepository
+	portfolioRepo      domain.UserPortfolioRepository
 	driRepo            domain.DRIRepository
 	nutriRepo          domain.NutritionRepository
 	workoutRepo        domain.WorkoutRepository
@@ -30,9 +31,14 @@ type userUseCase struct {
 }
 
 // NewUserUseCase creates a UserUseCase with the provided repository and JWT config.
-func NewUserUseCase(repo domain.UserRepository, driRepo domain.DRIRepository, nutriRepo domain.NutritionRepository, workoutRepo domain.WorkoutRepository, jwtSecret string, jwtExpirationHours int) domain.UserUseCase {
+func NewUserUseCase(repo domain.UserRepository, driRepo domain.DRIRepository, nutriRepo domain.NutritionRepository, workoutRepo domain.WorkoutRepository, jwtSecret string, jwtExpirationHours int, portfolioRepos ...domain.UserPortfolioRepository) domain.UserUseCase {
+	var portfolioRepo domain.UserPortfolioRepository
+	if len(portfolioRepos) > 0 {
+		portfolioRepo = portfolioRepos[0]
+	}
 	return &userUseCase{
 		repo:               repo,
+		portfolioRepo:      portfolioRepo,
 		driRepo:            driRepo,
 		nutriRepo:          nutriRepo,
 		workoutRepo:        workoutRepo,
@@ -191,6 +197,58 @@ func (u *userUseCase) GetProfile(ctx context.Context, userID uuid.UUID) (*domain
 	return u.repo.GetByID(ctx, userID)
 }
 
+func (u *userUseCase) GetPortfolio(ctx context.Context, userID uuid.UUID) (*domain.UserPortfolioResponse, error) {
+	user, err := u.repo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	portfolio := &domain.UserPortfolio{UserID: userID}
+	if u.portfolioRepo != nil {
+		loaded, err := u.portfolioRepo.GetPortfolio(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		portfolio = loaded
+	}
+	return buildPortfolioResponse(user, portfolio), nil
+}
+
+func (u *userUseCase) UpdatePortfolio(ctx context.Context, userID uuid.UUID, req *domain.UserPortfolioRequest) (*domain.UserPortfolioResponse, error) {
+	if u.portfolioRepo == nil {
+		return nil, domain.ErrInternalServerError
+	}
+	user, err := u.repo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	portfolio := &domain.UserPortfolio{
+		UserID:                userID,
+		PreferredCuisines:     cleanStringSlice(req.PreferredCuisines),
+		DislikedIngredients:   cleanStringSlice(req.DislikedIngredients),
+		ExcludedIngredients:   cleanStringSlice(req.ExcludedIngredients),
+		MealSchedule:          req.MealSchedule,
+		DailyWaterTargetML:    req.DailyWaterTargetML,
+		CalorieTargetOverride: req.CalorieTargetOverride,
+		MacroSplitOverride:    req.MacroSplitOverride,
+		Notes:                 strings.TrimSpace(req.Notes),
+	}
+	if portfolio.MealSchedule == nil {
+		portfolio.MealSchedule = map[string]any{}
+	}
+	if portfolio.MacroSplitOverride == nil {
+		portfolio.MacroSplitOverride = map[string]any{}
+	}
+	if err := u.portfolioRepo.UpsertPortfolio(ctx, portfolio); err != nil {
+		return nil, err
+	}
+	loaded, err := u.portfolioRepo.GetPortfolio(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return buildPortfolioResponse(user, loaded), nil
+}
+
 // GetTargets calculates personalized daily nutritional targets from DRI data.
 func (u *userUseCase) GetTargets(ctx context.Context, userID uuid.UUID) (*domain.UserTargetsResponse, error) {
 	user, err := u.repo.GetByID(ctx, userID)
@@ -220,17 +278,17 @@ func (u *userUseCase) GetTargets(ctx context.Context, userID uuid.UUID) (*domain
 	// ── Step D: Compute caloric target (TDEE or profile budget) ─────────────────
 	caloricTarget := computeCalorieTarget(user)
 
-	// Macro split: protein=25%, fat=30%, carb=45%
-	proteinKcal := caloricTarget * 0.25
-	fatKcal := caloricTarget * 0.30
-	carbKcal := caloricTarget * 0.45
+	proteinRatio, fatRatio, carbRatio, hasMacroOverride := u.macroSplitRatios(ctx, userID)
+	proteinKcal := caloricTarget * proteinRatio
+	fatKcal := caloricTarget * fatRatio
+	carbKcal := caloricTarget * carbRatio
 
 	proteinG := math.Round(proteinKcal/4*10) / 10
 	fatG := math.Round(fatKcal/9*10) / 10
 	carbG := math.Round(carbKcal/4*10) / 10
 
 	// Override protein with DRI EAR body-weight formula when available
-	if dri.Ear.Macronutrients.ProteinGPerKg != nil && user.WeightKg > 0 {
+	if !hasMacroOverride && dri.Ear.Macronutrients.ProteinGPerKg != nil && user.WeightKg > 0 {
 		proteinG = math.Round(*dri.Ear.Macronutrients.ProteinGPerKg*user.WeightKg*10) / 10
 	}
 
@@ -292,7 +350,7 @@ func (u *userUseCase) GetTargets(ctx context.Context, userID uuid.UUID) (*domain
 func (u *userUseCase) generateTokens(ctx context.Context, userID uuid.UUID, familyID uuid.UUID) (string, string, error) {
 	// Access Token: strict 15-minute lifespan in production (override via config for specific needs)
 	// Currently jwtExpirationHours represents hours, let's treat it as minutes for access if we enforce 15m
-	// Or we just hardcode 15m as per the security design plan. 
+	// Or we just hardcode 15m as per the security design plan.
 	accessExpiry := 15 * time.Minute
 	claims := jwt.MapClaims{
 		"sub": userID.String(),
@@ -400,13 +458,120 @@ func computeCalorieTarget(user *domain.User) float64 {
 		age := computeAge(*user.DOB)
 		var bmr float64
 		if strings.ToLower(user.Gender) == "female" {
-			bmr = 655.1 + (9.563*user.WeightKg) + (1.850*user.HeightCm) - (4.676*float64(age))
+			bmr = 655.1 + (9.563 * user.WeightKg) + (1.850 * user.HeightCm) - (4.676 * float64(age))
 		} else {
-			bmr = 66.47 + (13.75*user.WeightKg) + (5.003*user.HeightCm) - (6.755*float64(age))
+			bmr = 66.47 + (13.75 * user.WeightKg) + (5.003 * user.HeightCm) - (6.755 * float64(age))
 		}
 		return math.Round(bmr * 1.375) // lightly active multiplier
 	}
 	return 2000 // absolute last-resort default
+}
+
+func (u *userUseCase) macroSplitRatios(ctx context.Context, userID uuid.UUID) (protein, fat, carb float64, overridden bool) {
+	protein, fat, carb = 0.25, 0.30, 0.45
+	if u.portfolioRepo == nil {
+		return protein, fat, carb, false
+	}
+	portfolio, err := u.portfolioRepo.GetPortfolio(ctx, userID)
+	if err != nil || portfolio == nil || len(portfolio.MacroSplitOverride) == 0 {
+		return protein, fat, carb, false
+	}
+
+	p := macroSplitValue(portfolio.MacroSplitOverride, "protein")
+	f := macroSplitValue(portfolio.MacroSplitOverride, "fat")
+	c := macroSplitValue(portfolio.MacroSplitOverride, "carbohydrate")
+	if c == 0 {
+		c = macroSplitValue(portfolio.MacroSplitOverride, "carbs")
+	}
+	total := p + f + c
+	if total <= 0 {
+		return protein, fat, carb, false
+	}
+	if total > 1.5 {
+		p, f, c = p/100, f/100, c/100
+		total = p + f + c
+	}
+	if total < 0.95 || total > 1.05 {
+		return protein, fat, carb, false
+	}
+	return p, f, c, true
+}
+
+func macroSplitValue(values map[string]any, key string) float64 {
+	raw, ok := values[key]
+	if !ok || raw == nil {
+		return 0
+	}
+	switch value := raw.(type) {
+	case float64:
+		return value
+	case float32:
+		return float64(value)
+	case int:
+		return float64(value)
+	case int64:
+		return float64(value)
+	case string:
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err == nil {
+			return parsed
+		}
+	}
+	return 0
+}
+
+func buildPortfolioResponse(user *domain.User, portfolio *domain.UserPortfolio) *domain.UserPortfolioResponse {
+	if portfolio == nil {
+		portfolio = &domain.UserPortfolio{UserID: user.ID}
+	}
+	mealSchedule := map[string]any(portfolio.MealSchedule)
+	if mealSchedule == nil {
+		mealSchedule = map[string]any{}
+	}
+	macroSplit := map[string]any(portfolio.MacroSplitOverride)
+	if macroSplit == nil {
+		macroSplit = map[string]any{}
+	}
+	return &domain.UserPortfolioResponse{
+		UserID:                user.ID,
+		HeightCm:              user.HeightCm,
+		WeightKg:              user.WeightKg,
+		DOB:                   user.DOB,
+		Gender:                user.Gender,
+		ActivityLevel:         user.ActivityLevel,
+		BMR:                   user.BMR,
+		TDEE:                  user.TDEE,
+		GoalType:              user.GoalType,
+		DietaryPreference:     user.DietaryPreference,
+		Allergies:             user.Allergies,
+		MedicalConditions:     user.MedicalConditions,
+		PreferredCuisines:     []string(portfolio.PreferredCuisines),
+		DislikedIngredients:   []string(portfolio.DislikedIngredients),
+		ExcludedIngredients:   []string(portfolio.ExcludedIngredients),
+		MealSchedule:          mealSchedule,
+		DailyWaterTargetML:    portfolio.DailyWaterTargetML,
+		CalorieTargetOverride: portfolio.CalorieTargetOverride,
+		MacroSplitOverride:    macroSplit,
+		Notes:                 portfolio.Notes,
+		UpdatedAt:             portfolio.UpdatedAt,
+	}
+}
+
+func cleanStringSlice(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		cleaned := strings.ToLower(strings.TrimSpace(value))
+		if cleaned == "" {
+			continue
+		}
+		if _, ok := seen[cleaned]; ok {
+			continue
+		}
+		seen[cleaned] = struct{}{}
+		out = append(out, cleaned)
+	}
+	return out
 }
 
 // derefF64 safely dereferences a *float64 and returns 0 if nil.

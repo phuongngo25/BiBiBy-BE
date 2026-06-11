@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,6 +28,7 @@ type nutritionUseCase struct {
 	spoonClient         *spoonacular.Client
 	workoutRepo         domain.WorkoutRepository
 	userRepo            domain.UserRepository
+	portfolioRepo       domain.UserPortfolioRepository
 	analyticsService    service.AnalyticsAggregationService
 	streakService       service.StreakEvaluationService
 	gamificationService service.GamificationService
@@ -49,7 +51,12 @@ func NewNutritionUseCase(
 	cvPort domain.InferencePort,
 	kgPort domain.NutritionIntelligencePort,
 	redis *redis.Client,
+	portfolioRepos ...domain.UserPortfolioRepository,
 ) domain.NutritionUseCase {
+	var portfolioRepo domain.UserPortfolioRepository
+	if len(portfolioRepos) > 0 {
+		portfolioRepo = portfolioRepos[0]
+	}
 	analyticsSvc := service.NewAnalyticsAggregationService(repo, userRepo)
 	var streakSvc service.StreakEvaluationService
 	if streakRepo != nil {
@@ -68,6 +75,7 @@ func NewNutritionUseCase(
 		spoonClient:         spoonClient,
 		workoutRepo:         workoutRepo,
 		userRepo:            userRepo,
+		portfolioRepo:       portfolioRepo,
 		analyticsService:    analyticsSvc,
 		streakService:       streakSvc,
 		gamificationService: gamificationSvc,
@@ -327,6 +335,14 @@ func (u *nutritionUseCase) GetDailyPlan(ctx context.Context, userID uuid.UUID, d
 		} else {
 			targetCalories = float64(targetCal)
 			targetWater = targetWat
+		}
+		if portfolio := u.loadPlannerPortfolio(ctx, userID); portfolio != nil {
+			if portfolio.DailyWaterTargetML > 0 {
+				targetWater = portfolio.DailyWaterTargetML
+			}
+			if portfolio.CalorieTargetOverride != nil && *portfolio.CalorieTargetOverride > 0 {
+				targetCalories = *portfolio.CalorieTargetOverride
+			}
 		}
 	}
 	consumedWater := 0
@@ -866,6 +882,7 @@ func (u *nutritionUseCase) GenerateWeeklyPlan(ctx context.Context, userID uuid.U
 	candidateFoods := req.CandidateFoods
 	generatedFromDB := false
 	dbCandidates := map[string]domain.Food{}
+	userPortfolio := u.loadPlannerPortfolio(ctx, userID)
 	if len(candidateFoods) == 0 {
 		foods, err := u.repo.GetRandomFoods(ctx, 100)
 		if err != nil {
@@ -873,9 +890,10 @@ func (u *nutritionUseCase) GenerateWeeklyPlan(ctx context.Context, userID uuid.U
 			return nil, fmt.Errorf("failed to load planner candidates: %w", err)
 		}
 		userProfile, _ := u.userRepo.GetByID(ctx, userID)
+		foods = sortPlannerFoodsByPortfolio(foods, userPortfolio)
 		candidateFoods = make([]string, 0, len(foods))
 		for _, food := range foods {
-			if !plannerFoodAllowedByProfile(food, userProfile) {
+			if !plannerFoodAllowedByProfile(food, userProfile, userPortfolio) {
 				continue
 			}
 			foodID := food.ID.String()
@@ -942,7 +960,7 @@ func (u *nutritionUseCase) GenerateWeeklyPlan(ctx context.Context, userID uuid.U
 
 	meals := validMeals
 	if generatedFromDB {
-		meals = expandWeeklyPlanMeals(validMeals, req.StartDate)
+		meals = expandWeeklyPlanMeals(validMeals, req.StartDate, userPortfolio)
 	}
 
 	resp := &domain.GenerateWeeklyPlanResponse{
@@ -959,9 +977,21 @@ func (u *nutritionUseCase) GenerateWeeklyPlan(ctx context.Context, userID uuid.U
 	return resp, nil
 }
 
-func plannerFoodAllowedByProfile(food domain.Food, user *domain.User) bool {
+func (u *nutritionUseCase) loadPlannerPortfolio(ctx context.Context, userID uuid.UUID) *domain.UserPortfolio {
+	if u.portfolioRepo == nil {
+		return nil
+	}
+	portfolio, err := u.portfolioRepo.GetPortfolio(ctx, userID)
+	if err != nil {
+		log.Printf("[Planner] Portfolio unavailable for user %s: %v", userID, err)
+		return nil
+	}
+	return portfolio
+}
+
+func plannerFoodAllowedByProfile(food domain.Food, user *domain.User, portfolio *domain.UserPortfolio) bool {
 	if user == nil {
-		return true
+		return !plannerFoodExcludedByPortfolio(food, portfolio)
 	}
 
 	terms := strings.ToLower(strings.Join([]string{
@@ -997,7 +1027,64 @@ func plannerFoodAllowedByProfile(food domain.Food, user *domain.User) bool {
 		}
 	}
 
+	if plannerFoodExcludedByPortfolio(food, portfolio) {
+		return false
+	}
+
 	return true
+}
+
+func plannerFoodExcludedByPortfolio(food domain.Food, portfolio *domain.UserPortfolio) bool {
+	if portfolio == nil {
+		return false
+	}
+	terms := plannerFoodTerms(food)
+	for _, excluded := range portfolio.ExcludedIngredients {
+		if excluded == "" {
+			continue
+		}
+		if strings.Contains(terms, strings.ToLower(strings.TrimSpace(excluded))) {
+			return true
+		}
+	}
+	return false
+}
+
+func sortPlannerFoodsByPortfolio(foods []domain.Food, portfolio *domain.UserPortfolio) []domain.Food {
+	if portfolio == nil {
+		return foods
+	}
+	sorted := append([]domain.Food(nil), foods...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return plannerPortfolioScore(sorted[i], portfolio) > plannerPortfolioScore(sorted[j], portfolio)
+	})
+	return sorted
+}
+
+func plannerPortfolioScore(food domain.Food, portfolio *domain.UserPortfolio) int {
+	score := 0
+	terms := plannerFoodTerms(food)
+	for _, cuisine := range portfolio.PreferredCuisines {
+		if cuisine != "" && strings.Contains(terms, strings.ToLower(strings.TrimSpace(cuisine))) {
+			score += 10
+		}
+	}
+	for _, disliked := range portfolio.DislikedIngredients {
+		if disliked != "" && strings.Contains(terms, strings.ToLower(strings.TrimSpace(disliked))) {
+			score -= 5
+		}
+	}
+	return score
+}
+
+func plannerFoodTerms(food domain.Food) string {
+	return strings.ToLower(strings.Join([]string{
+		food.Name,
+		food.NameEn,
+		food.NameVi,
+		food.Category,
+		food.Source,
+	}, " "))
 }
 
 func splitPlannerCSV(value string) []string {
@@ -1063,7 +1150,7 @@ func plannerKGUnavailable(resp *domain.AnalyzeMealResponse) bool {
 	return false
 }
 
-func expandWeeklyPlanMeals(candidates []domain.PlannedMealDTO, startDateRaw string) []domain.PlannedMealDTO {
+func expandWeeklyPlanMeals(candidates []domain.PlannedMealDTO, startDateRaw string, portfolio *domain.UserPortfolio) []domain.PlannedMealDTO {
 	if len(candidates) == 0 {
 		return candidates
 	}
@@ -1073,7 +1160,7 @@ func expandWeeklyPlanMeals(candidates []domain.PlannedMealDTO, startDateRaw stri
 		startDate = time.Now()
 	}
 
-	mealTypes := []string{"breakfast", "lunch", "dinner"}
+	mealTypes := plannerMealTypesFromPortfolio(portfolio)
 	meals := make([]domain.PlannedMealDTO, 0, 21)
 	for day := 0; day < 7; day++ {
 		date := startDate.AddDate(0, 0, day).Format("2006-01-02")
@@ -1094,6 +1181,41 @@ func expandWeeklyPlanMeals(candidates []domain.PlannedMealDTO, startDateRaw stri
 		}
 	}
 	return meals
+}
+
+func plannerMealTypesFromPortfolio(portfolio *domain.UserPortfolio) []string {
+	defaultTypes := []string{"breakfast", "lunch", "dinner"}
+	if portfolio == nil || portfolio.MealSchedule == nil {
+		return defaultTypes
+	}
+	enabled := make([]string, 0, 4)
+	for _, mealType := range []string{"breakfast", "lunch", "dinner", "snack"} {
+		if mealScheduleEnabled(portfolio.MealSchedule, mealType) {
+			enabled = append(enabled, mealType)
+		}
+	}
+	if len(enabled) == 0 {
+		return defaultTypes
+	}
+	return enabled
+}
+
+func mealScheduleEnabled(schedule map[string]any, mealType string) bool {
+	raw, ok := schedule[mealType]
+	if !ok {
+		return mealType != "snack"
+	}
+	switch value := raw.(type) {
+	case bool:
+		return value
+	case map[string]any:
+		if enabled, ok := value["enabled"].(bool); ok {
+			return enabled
+		}
+		return true
+	default:
+		return true
+	}
 }
 
 func (u *nutritionUseCase) ReoptimizePlan(ctx context.Context, userID uuid.UUID, req *domain.ReoptimizeWeeklyPlanRequest) (*domain.GenerateWeeklyPlanResponse, error) {
@@ -1203,6 +1325,7 @@ func (u *nutritionUseCase) analyzeMealFromCatalog(ctx context.Context, userID uu
 	}
 
 	userProfile, _ := u.userRepo.GetByID(ctx, userID)
+	userPortfolio := u.loadPlannerPortfolio(ctx, userID)
 	for _, food := range foods {
 		foodID := food.ID.String()
 		foodEnrichment := enrichCatalogFood(food)
@@ -1212,7 +1335,16 @@ func (u *nutritionUseCase) analyzeMealFromCatalog(ctx context.Context, userID uu
 		}
 		violations = append(violations, ingredientProfileViolations(foodID, food, foodEnrichment, userProfile)...)
 
-		if len(foodEnrichment.Ingredients) == 0 && !plannerFoodAllowedByProfile(food, userProfile) {
+		if plannerFoodExcludedByPortfolio(food, userPortfolio) {
+			violations = append(violations, domain.MealViolation{
+				ViolationType:    "portfolio_excluded_ingredient",
+				Description:      fmt.Sprintf("%s contains an ingredient excluded in your portfolio", nonEmptyPlanner(food.Name, food.NameEn, food.ID.String())),
+				Severity:         "CRITICAL",
+				OffendingFoodIDs: []string{food.ID.String()},
+			})
+		}
+
+		if len(foodEnrichment.Ingredients) == 0 && !plannerFoodAllowedByProfile(food, userProfile, userPortfolio) {
 			violations = append(violations, domain.MealViolation{
 				ViolationType:    "local_profile_constraint",
 				Description:      fmt.Sprintf("%s conflicts with your dietary profile", nonEmptyPlanner(food.Name, food.NameEn, food.ID.String())),

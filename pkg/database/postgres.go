@@ -64,6 +64,7 @@ func RunMigrations(db *gorm.DB) error {
 	// foreign keys that depend on them. This keeps first boot idempotent.
 	if err := db.AutoMigrate(
 		&domain.User{},
+		&domain.UserPortfolio{},
 		&domain.Food{},
 		&domain.MealLog{},
 		&domain.Exercise{},
@@ -131,6 +132,7 @@ func RunMigrations(db *gorm.DB) error {
 
 	return db.AutoMigrate(
 		&domain.User{},
+		&domain.UserPortfolio{},
 		&domain.Food{},
 		&domain.MealLog{},
 		&domain.Exercise{},

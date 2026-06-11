@@ -35,6 +35,8 @@ func RegisterProfileRoutes(rg *gin.RouterGroup, uc domain.UserUseCase) {
 	rg.PUT("/users/profile", h.UpdateProfile)
 	rg.GET("/users/profile", h.GetProfile)
 	rg.GET("/users/profile/targets", h.GetTargets)
+	rg.GET("/users/portfolio", h.GetPortfolio)
+	rg.PUT("/users/portfolio", h.UpdatePortfolio)
 }
 
 // Register godoc
@@ -115,8 +117,12 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	// Parse DateOfBirth string ("YYYY-MM-DD" or RFC3339) sent by Flutter into *time.Time
-	if req.DateOfBirth != nil && *req.DateOfBirth != "" {
-		dobStr := *req.DateOfBirth
+	dobValue := req.DateOfBirth
+	if dobValue == nil {
+		dobValue = req.DOBInput
+	}
+	if dobValue != nil && *dobValue != "" {
+		dobStr := *dobValue
 		var parsed time.Time
 		var parseErr error
 
@@ -139,6 +145,56 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "profile updated successfully"})
+}
+
+// GetPortfolio godoc
+// GET /api/v1/users/portfolio
+func (h *UserHandler) GetPortfolio(c *gin.Context) {
+	userIDStr := middleware.GetUserID(c)
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID in token"})
+		return
+	}
+
+	portfolio, err := h.uc.GetPortfolio(c.Request.Context(), userID)
+	if err != nil {
+		if err == domain.ErrUserNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, portfolio)
+}
+
+// UpdatePortfolio godoc
+// PUT /api/v1/users/portfolio
+func (h *UserHandler) UpdatePortfolio(c *gin.Context) {
+	userIDStr := middleware.GetUserID(c)
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID in token"})
+		return
+	}
+
+	var req domain.UserPortfolioRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	portfolio, err := h.uc.UpdatePortfolio(c.Request.Context(), userID, &req)
+	if err != nil {
+		if err == domain.ErrUserNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, portfolio)
 }
 
 // GetProfile godoc
