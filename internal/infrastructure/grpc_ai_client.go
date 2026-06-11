@@ -23,15 +23,14 @@ type grpcAIClient struct {
 
 // NewGrpcAIClient khởi tạo kết nối gRPC tới AI server (VD: localhost:50051).
 func NewGrpcAIClient(targetURI string) (domain.InferencePort, error) {
-	// Sử dụng DialContext với timeout 5s cho việc kết nối ban đầu
+	// Create the client without blocking startup. The gRPC channel will connect
+	// lazily on the first request and can recover if the CV service starts later.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Trong môi trường Production, bạn nên cấu hình TLS/SSL thay vì insecure
 	conn, err := grpc.DialContext(ctx, targetURI,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUnaryInterceptor(metrics.UnaryClientInterceptor()),
-		grpc.WithBlock(), // Đợi kết nối thành công trước khi trả về
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to AI microservice at %s: %w", targetURI, err)
@@ -171,12 +170,12 @@ func (g *grpcAIClient) AnalyzeMealImage(ctx context.Context, imageBytes []byte, 
 // BatchAnalyzeFoods calls the NutritionIntelligenceService (Port 50051) via the internal bridge.
 // Since grpcAIClient is currently connected to Port 50052 (Inference), this implementation
 // assumes a shared connection or expects a distinct client for the Intelligence Service.
-// Architect Directive: For monorepo simplicity, we assume the provided connection can resolve 
+// Architect Directive: For monorepo simplicity, we assume the provided connection can resolve
 // the BatchAnalyzeFoods RPC if correctly registered.
 func (g *grpcAIClient) BatchAnalyzeFoods(ctx context.Context, foodIDs []string, userDiseases []string) (map[string]domain.BatchFoodMetadata, error) {
 	// We need to cast the client to the correct interface if they share the same channel
 	// However, inferencev1 and intelligencepb are different packages.
-	// For Sprint 1A, we'll implement this in a separate client (grpcNutritionClient) 
+	// For Sprint 1A, we'll implement this in a separate client (grpcNutritionClient)
 	// as per the existing infrastructure split.
 	return nil, fmt.Errorf("use grpcNutritionClient for BatchAnalyzeFoods (Sprint 1A)")
 }

@@ -638,14 +638,9 @@ func (u *nutritionUseCase) EstimateNutrition(ctx context.Context, imageBytes []b
 	if result.FoodLabel == "unknown" || result.FoodLabel == "" {
 		return nil, fmt.Errorf("ai could not recognize food in image")
 	}
-	dishIDStr, exists := AIFoodRegistry[result.FoodLabel]
-	if !exists {
-		return nil, fmt.Errorf("unsupported food label from AI: %s", result.FoodLabel)
-	}
-	parsedDishID, _ := uuid.Parse(dishIDStr)
-	foodInfo, err := u.repo.GetFoodByID(ctx, parsedDishID)
+	foodInfo, err := u.resolveAIFood(ctx, result.FoodLabel)
 	if err != nil {
-		return nil, fmt.Errorf("food item not found in DB: %w", err)
+		return nil, err
 	}
 	ratio := result.MassG / 100.0
 	return &domain.FoodEstimateResponse{
@@ -656,6 +651,148 @@ func (u *nutritionUseCase) EstimateNutrition(ctx context.Context, imageBytes []b
 		FatPer100g: foodInfo.FatPer100g, CarbsPer100g: foodInfo.CarbsPer100g,
 		QuantityGrams: result.MassG, Confidence: result.FoodLabelConfidence,
 	}, nil
+}
+
+func (u *nutritionUseCase) resolveAIFood(ctx context.Context, aiLabel string) (*domain.Food, error) {
+	label := strings.TrimSpace(strings.ToLower(aiLabel))
+	if label == "" {
+		return nil, fmt.Errorf("unsupported food label from AI: %s", aiLabel)
+	}
+
+	if dishIDStr, exists := AIFoodRegistry[label]; exists {
+		if parsedDishID, err := uuid.Parse(dishIDStr); err == nil {
+			foodInfo, err := u.repo.GetFoodByID(ctx, parsedDishID)
+			if err == nil && foodInfo != nil {
+				return foodInfo, nil
+			}
+			log.Printf("[CV] AI registry UUID miss label=%s id=%s err=%v; falling back to catalog search", label, dishIDStr, err)
+		}
+	}
+
+	for _, term := range aiCatalogSearchTerms(label) {
+		foods, err := u.repo.SearchFoods(ctx, term)
+		if err != nil {
+			log.Printf("[CV] catalog search failed label=%s term=%q err=%v", label, term, err)
+			continue
+		}
+		if selected := selectAIFoodCandidate(label, term, foods); selected != nil {
+			log.Printf("[CV] AI label resolved via catalog label=%s term=%q food_id=%s code=%s name=%s",
+				label, term, selected.ID, selected.Code, selected.Name)
+			return selected, nil
+		}
+	}
+
+	return nil, fmt.Errorf("food item not found in DB for AI label %q", label)
+}
+
+func aiCatalogSearchTerms(label string) []string {
+	label = strings.TrimSpace(strings.ToLower(label))
+	labelName := strings.ReplaceAll(label, "_", " ")
+
+	terms := map[string][]string{
+		"pho":        {"Pho Thin", "Phở Thìn", "Pho with rare beef", "Phở bò", "Pho"},
+		"bun_bo_hue": {"Bun bo Hue", "Bún bò Huế", "Beef noodle soup"},
+		"com_tam":    {"Com tam", "Cơm tấm", "Broken rice"},
+		"banh_mi":    {"Banh mi", "Bánh mì", "Vietnamese baguette"},
+		"goi_cuon":   {"Goi cuon", "Gỏi cuốn", "Fresh spring rolls"},
+		"xoi_xeo":    {"Xoi xeo", "Xôi xéo"},
+		"mi_quang":   {"Mi Quang", "Mì Quảng"},
+		"hu_tieu":    {"Hu tieu", "Hủ tiếu"},
+		"bun_rieu":   {"Bun rieu", "Bún riêu"},
+	}
+
+	out := make([]string, 0, 4)
+	out = append(out, terms[label]...)
+	out = append(out, labelName)
+	if labelName != label {
+		out = append(out, label)
+	}
+	return uniqueNonEmpty(out)
+}
+
+func selectAIFoodCandidate(label, term string, foods []domain.Food) *domain.Food {
+	if len(foods) == 0 {
+		return nil
+	}
+
+	normalizedTerm := normalizeCatalogText(term)
+	normalizedLabel := normalizeCatalogText(strings.ReplaceAll(label, "_", " "))
+	bestIdx := -1
+	bestScore := -1
+
+	for i := range foods {
+		food := foods[i]
+		text := normalizeCatalogText(strings.Join([]string{
+			food.Name,
+			food.NameEn,
+			food.NameVi,
+			food.Code,
+			food.Source,
+		}, " "))
+
+		score := 0
+		if food.Source == "VFA_DISH" {
+			score += 40
+		} else if food.Source == "VFA" {
+			score += 20
+		}
+		if food.CaloriesPer100g > 0 {
+			score += 10
+		}
+		if strings.Contains(text, normalizedTerm) {
+			score += 100
+		}
+		if strings.Contains(text, normalizedLabel) {
+			score += 50
+		}
+		if strings.Contains(text, "dish") {
+			score += 5
+		}
+
+		if score > bestScore {
+			bestScore = score
+			bestIdx = i
+		}
+	}
+
+	if bestIdx < 0 {
+		return nil
+	}
+	return &foods[bestIdx]
+}
+
+func normalizeCatalogText(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	replacer := strings.NewReplacer(
+		"à", "a", "á", "a", "ạ", "a", "ả", "a", "ã", "a",
+		"â", "a", "ầ", "a", "ấ", "a", "ậ", "a", "ẩ", "a", "ẫ", "a",
+		"ă", "a", "ằ", "a", "ắ", "a", "ặ", "a", "ẳ", "a", "ẵ", "a",
+		"è", "e", "é", "e", "ẹ", "e", "ẻ", "e", "ẽ", "e",
+		"ê", "e", "ề", "e", "ế", "e", "ệ", "e", "ể", "e", "ễ", "e",
+		"ì", "i", "í", "i", "ị", "i", "ỉ", "i", "ĩ", "i",
+		"ò", "o", "ó", "o", "ọ", "o", "ỏ", "o", "õ", "o",
+		"ô", "o", "ồ", "o", "ố", "o", "ộ", "o", "ổ", "o", "ỗ", "o",
+		"ơ", "o", "ờ", "o", "ớ", "o", "ợ", "o", "ở", "o", "ỡ", "o",
+		"ù", "u", "ú", "u", "ụ", "u", "ủ", "u", "ũ", "u",
+		"ư", "u", "ừ", "u", "ứ", "u", "ự", "u", "ử", "u", "ữ", "u",
+		"ỳ", "y", "ý", "y", "ỵ", "y", "ỷ", "y", "ỹ", "y",
+		"đ", "d", "_", " ", "-", " ",
+	)
+	return strings.Join(strings.Fields(replacer.Replace(value)), " ")
+}
+
+func uniqueNonEmpty(values []string) []string {
+	seen := make(map[string]bool, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
 }
 
 func (u *nutritionUseCase) GetThresholdSnapshot(ctx context.Context, userID uuid.UUID) (*domain.ThresholdSnapshot, error) {

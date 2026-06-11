@@ -112,6 +112,8 @@ func main() {
 	spoonClient := spoonacular.NewClient(cfg.SpoonacularAPIKey)
 	exerciseClient := rapidapi.NewExerciseClient(cfg.RapidAPIKey)
 	kgTarget, cvTarget := resolveInternalServiceTargets(cfg)
+	log.Printf("[SRE] KG target: %s", kgTarget)
+	log.Printf("[SRE] CV target: %s", cvTarget)
 	kgClient, kgErr := infrastructure.NewGrpcNutritionClient(kgTarget)
 	if kgErr != nil {
 		log.Printf("[SRE] KG Client unavailable: %v", kgErr)

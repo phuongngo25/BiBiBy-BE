@@ -1,0 +1,10 @@
+.git
+.env
+*.log
+*.exe
+*.exe~
+uploads
+tmp
+.runtime
+vendor
+data.zip

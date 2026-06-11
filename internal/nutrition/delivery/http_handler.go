@@ -494,6 +494,8 @@ func (h *NutritionHandler) EstimateNutrition(c *gin.Context) {
 		return
 	}
 	imageBytes := buf.Bytes()
+	log.Printf("[CV] EstimateNutrition upload filename=%s multipart_size=%d bytes_read=%d detected_type=%s",
+		file.Filename, file.Size, len(imageBytes), http.DetectContentType(imageBytes))
 
 	result, err := h.uc.EstimateNutrition(c.Request.Context(), imageBytes)
 	if err != nil {
