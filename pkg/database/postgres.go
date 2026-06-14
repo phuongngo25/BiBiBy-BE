@@ -130,6 +130,19 @@ func RunMigrations(db *gorm.DB) error {
 		return err
 	}
 
+	log.Println("[Migrations] Running explicit migration: 005_normalize_pho_thin_nutrition.sql")
+	migPath5, err := findMigrationFile("migrations/005_normalize_pho_thin_nutrition.sql")
+	if err != nil {
+		return err
+	}
+	migration005, err := os.ReadFile(migPath5)
+	if err != nil {
+		return err
+	}
+	if err := db.Exec(string(migration005)).Error; err != nil {
+		return err
+	}
+
 	return db.AutoMigrate(
 		&domain.User{},
 		&domain.UserPortfolio{},
@@ -293,11 +306,29 @@ func loadVFADishes(path string) []domain.Food {
 		for _, n := range item.NutritionalComponents {
 			applyNutrient(&food, n.NameEn, parseFloat(n.Amount))
 		}
+		normalizeKnownVFADishServing(&food, item.Code)
 		if food.NameEn != "" {
 			foods = append(foods, food)
 		}
 	}
 	return foods
+}
+
+func normalizeKnownVFADishServing(food *domain.Food, code string) {
+	servingGrams, known := map[string]float64{
+		"HAN-112002": 650,
+		"SFF-112002": 650,
+	}[strings.ToUpper(strings.TrimSpace(code))]
+	if !known || servingGrams <= 0 {
+		return
+	}
+
+	factor := 100 / servingGrams
+	food.CaloriesPer100g *= factor
+	food.ProteinPer100g *= factor
+	food.CarbsPer100g *= factor
+	food.FatPer100g *= factor
+	food.ServingSize = fmt.Sprintf("%.0fg", servingGrams)
 }
 
 func parseFloat(value any) float64 {

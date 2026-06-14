@@ -127,7 +127,7 @@ func seedDRIs(db *gorm.DB, path string) error {
 		}
 		batch = append(batch, dto)
 	}
-	
+
 	if len(batch) > 0 {
 		return db.Create(&batch).Error
 	}
@@ -236,6 +236,7 @@ func seedVFADish(db *gorm.DB, path string) error {
 			Category:       "Prepared Dish",
 			Source:         "VFA_DISH",
 			IsVerified:     true,
+			ServingSize:    "100g",
 			Micronutrients: make(datatypes.JSONMap),
 		}
 
@@ -245,7 +246,7 @@ func seedVFADish(db *gorm.DB, path string) error {
 
 		for _, nut := range dto.NutritionalComponents {
 			nName := strings.ToLower(nut.NameEn)
-			
+
 			var amount float64
 			switch val := nut.Amount.(type) {
 			case float64:
@@ -269,6 +270,8 @@ func seedVFADish(db *gorm.DB, path string) error {
 			}
 		}
 
+		normalizeKnownVFADishServing(&food, dto.Code)
+
 		batch = append(batch, food)
 		if len(batch) >= batchSize {
 			flushBatch(db, batch)
@@ -279,6 +282,23 @@ func seedVFADish(db *gorm.DB, path string) error {
 		flushBatch(db, batch)
 	}
 	return nil
+}
+
+func normalizeKnownVFADishServing(food *domain.Food, code string) {
+	servingGrams, known := map[string]float64{
+		"HAN-112002": 650,
+		"SFF-112002": 650,
+	}[strings.ToUpper(strings.TrimSpace(code))]
+	if !known || servingGrams <= 0 {
+		return
+	}
+
+	factor := 100 / servingGrams
+	food.CaloriesPer100g *= factor
+	food.ProteinPer100g *= factor
+	food.CarbsPer100g *= factor
+	food.FatPer100g *= factor
+	food.ServingSize = fmt.Sprintf("%.0fg", servingGrams)
 }
 
 // -------------------------------------------------------------------------

@@ -650,6 +650,8 @@ func (u *nutritionUseCase) EstimateNutrition(ctx context.Context, imageBytes []b
 		CaloriesPer100g: foodInfo.CaloriesPer100g, ProteinPer100g: foodInfo.ProteinPer100g,
 		FatPer100g: foodInfo.FatPer100g, CarbsPer100g: foodInfo.CarbsPer100g,
 		QuantityGrams: result.MassG, Confidence: result.FoodLabelConfidence,
+		ServingSize: result.MassG, ServingUnit: "g", Source: "ai",
+		EstimateMethod: "nutrition5k_depth_anything",
 	}, nil
 }
 
@@ -657,6 +659,18 @@ func (u *nutritionUseCase) resolveAIFood(ctx context.Context, aiLabel string) (*
 	label := strings.TrimSpace(strings.ToLower(aiLabel))
 	if label == "" {
 		return nil, fmt.Errorf("unsupported food label from AI: %s", aiLabel)
+	}
+
+	if catalogCode, exists := AIFoodCatalogCodeRegistry[label]; exists {
+		foods, err := u.repo.SearchFoods(ctx, catalogCode)
+		if err == nil {
+			if selected := selectAIFoodCandidate(label, catalogCode, foods); selected != nil {
+				log.Printf("[CV] AI label resolved via stable catalog code label=%s code=%s food_id=%s name=%s",
+					label, catalogCode, selected.ID, selected.Name)
+				return selected, nil
+			}
+		}
+		log.Printf("[CV] AI catalog code miss label=%s code=%s err=%v; falling back", label, catalogCode, err)
 	}
 
 	if dishIDStr, exists := AIFoodRegistry[label]; exists {
@@ -1823,6 +1837,10 @@ var AIFoodRegistry = map[string]string{
 	"nem_chua":         "42fd673e-11b5-4298-9353-85cb7e4ef371",
 	"pho":              "525514d7-4261-4d7d-8cd6-6c5bcf28646f",
 	"xoi_xeo":          "25163e9b-a507-4e51-ba5d-e66cdfcf35d0",
+}
+
+var AIFoodCatalogCodeRegistry = map[string]string{
+	"pho": "vfa_dish_SFF-112002",
 }
 
 func mapComplexResultsToFoods(recipes []spoonacular.RecipeResult) []domain.Food {

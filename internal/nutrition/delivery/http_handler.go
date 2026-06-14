@@ -499,10 +499,13 @@ func (h *NutritionHandler) EstimateNutrition(c *gin.Context) {
 
 	result, err := h.uc.EstimateNutrition(c.Request.Context(), imageBytes)
 	if err != nil {
+		log.Printf("[CV] EstimateNutrition failed filename=%s error=%v", file.Filename, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	log.Printf("[CV] EstimateNutrition success filename=%s food_id=%s name=%s quantity_grams=%.2f method=%s",
+		file.Filename, result.FoodID, result.Name, result.QuantityGrams, result.EstimateMethod)
 	c.JSON(http.StatusOK, result)
 }
 

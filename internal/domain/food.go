@@ -327,4 +327,8 @@ type FoodEstimateResponse struct {
 	CarbsPer100g    float64   `json:"carbs_per_100g"`
 	QuantityGrams   float64   `json:"quantity_grams"`
 	Confidence      float64   `json:"confidence"`
+	ServingSize     float64   `json:"serving_size"`
+	ServingUnit     string    `json:"serving_unit"`
+	Source          string    `json:"source"`
+	EstimateMethod  string    `json:"estimate_method"`
 }

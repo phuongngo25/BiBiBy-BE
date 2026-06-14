@@ -63,12 +63,11 @@ func (g *grpcAIClient) EstimateVolume(ctx context.Context, imageBytes []byte) (*
 		return nil, fmt.Errorf("ai inference failed: %w", err)
 	}
 
-	log.Printf("[gRPC] AI Success | ReqID: %s | Latency: %.2fms | Label: %s (%.2f) | Volume: %.2f cm³ | Conf: %.2f | Mass: %.2fg",
+	log.Printf("[gRPC] AI Success | ReqID: %s | Latency: %.2fms | Label: %s (%.2f) | Volume: %.2f cm³ | VolumeConf: %.2f | Mass: %.2fg",
 		res.RequestId, res.LatencyMs, res.FoodLabel, res.FoodLabelConfidence, res.VolumeCm3, res.VolumeConfidence, res.MassG)
 
-	// Có thể throw lỗi nội bộ nếu Confidence quá thấp (< 0.5)
-	if res.VolumeConfidence < 0.5 {
-		return nil, fmt.Errorf("ai confidence too low: %.2f", res.VolumeConfidence)
+	if err := validateEstimateResponse(res); err != nil {
+		return nil, err
 	}
 
 	return &domain.InferenceResult{
@@ -77,8 +76,20 @@ func (g *grpcAIClient) EstimateVolume(ctx context.Context, imageBytes []byte) (*
 		VolumeCm3:           float64(res.VolumeCm3),
 		Density:             float64(res.DensityGCm3),
 		MassG:               float64(res.MassG),
-		Confidence:          float64(res.VolumeConfidence),
+		Confidence:          float64(res.FoodLabelConfidence),
 	}, nil
+}
+
+func validateEstimateResponse(res *pb.EstimateVolumeResponse) error {
+	// Phase 5 promotes direct mass. Volume confidence is zero when volume is
+	// derived from mass/density, so it must not reject a valid mass result.
+	if !res.HasMass || res.MassG <= 0 {
+		return fmt.Errorf("ai did not return a valid mass estimate")
+	}
+	if res.FoodLabel == "" || res.FoodLabel == "unknown" || res.FoodLabelConfidence < 0.5 {
+		return fmt.Errorf("ai food classification confidence too low: %.2f", res.FoodLabelConfidence)
+	}
+	return nil
 }
 
 func (g *grpcAIClient) AnalyzeMealImage(ctx context.Context, imageBytes []byte, userDiseases []string) (*domain.AnalyzeMealResult, error) {

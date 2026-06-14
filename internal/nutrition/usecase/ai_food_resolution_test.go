@@ -14,6 +14,12 @@ func TestAICatalogSearchTerms_PhoPrioritizesCatalogDishNames(t *testing.T) {
 	}
 }
 
+func TestPhoUsesStableCatalogCode(t *testing.T) {
+	if got := AIFoodCatalogCodeRegistry["pho"]; got != "vfa_dish_SFF-112002" {
+		t.Fatalf("pho catalog code: got %q", got)
+	}
+}
+
 func TestSelectAIFoodCandidate_PrefersMatchingVFADish(t *testing.T) {
 	phoID := uuid.New()
 	selected := selectAIFoodCandidate("pho", "Pho Thin", []domain.Food{
