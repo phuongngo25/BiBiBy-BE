@@ -1,0 +1,259 @@
+name: nutrix-prod
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-your_password_here}
+      POSTGRES_DB: ${POSTGRES_DB:-nutrix}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - nutrix_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-nutrix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - nutrix
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-nutrix-redis-secret}
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - nutrix_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-nutrix-redis-secret} ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - nutrix
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - nutrix_minio_data:/data
+    networks:
+      - nutrix
+
+  ai-postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      POSTGRES_DB: ${AI_POSTGRES_DB:-nutrix}
+      POSTGRES_USER: ${AI_POSTGRES_USER:-nutrix}
+      POSTGRES_PASSWORD: ${AI_POSTGRES_PASSWORD:-nutrix}
+    ports:
+      - "${AI_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - nutrix_ai_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AI_POSTGRES_USER:-nutrix} -d ${AI_POSTGRES_DB:-nutrix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - nutrix
+
+  neo4j:
+    image: neo4j:5.18.1
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-password123}
+    ports:
+      - "${NEO4J_HTTP_PORT:-7474}:7474"
+      - "${NEO4J_BOLT_PORT:-7687}:7687"
+    volumes:
+      - nutrix_neo4j_data:/data
+      - nutrix_neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u ${NEO4J_USER:-neo4j} -p ${NEO4J_PASSWORD:-password123} 'RETURN 1' >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+    networks:
+      - nutrix
+
+  ai-kg:
+    build:
+      context: ../AI_server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-password123}
+      POSTGRES_URL: ${AI_POSTGRES_URL:-postgresql+asyncpg://nutrix:nutrix@ai-postgres:5432/nutrix}
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "${GRPC_AI_PORT:-50051}:50051"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      ai-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.create_connection(('127.0.0.1', 50051), 5); s.close()\""]
+      interval: 10s
+      timeout: 8s
+      retries: 20
+      start_period: 20s
+    networks:
+      - nutrix
+
+  ai-cv:
+    build:
+      context: ../AI_server/Computer_Vision
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-password123}
+      POSTGRES_URL: ${AI_POSTGRES_URL:-postgresql+asyncpg://nutrix:nutrix@ai-postgres:5432/nutrix}
+      NUTRIX_GRPC_PORT: "50052"
+      NUTRIX_HTTP_HOST: 0.0.0.0
+      NUTRIX_HTTP_PORT: "8081"
+      NUTRIX_MODEL_DEVICE: ${NUTRIX_MODEL_DEVICE:-cpu}
+      NUTRIX_MINIO_ENDPOINT: http://minio:9000
+      NUTRIX_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      NUTRIX_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "${GRPC_CV_PORT:-50052}:50052"
+      - "${NUTRIX_HTTP_PORT:-8081}:8081"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.create_connection(('127.0.0.1', 50052), 5); s.close()\""]
+      interval: 15s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+    networks:
+      - nutrix
+
+  go-seeder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["/app/seeder"]
+    restart: "no"
+    environment:
+      - TZ=${TZ:-Asia/Ho_Chi_Minh}
+      - DB_DSN=${DB_DSN:-postgres://postgres:your_password_here@postgres:5432/nutrix?sslmode=disable}
+      - JWT_SECRET=${JWT_SECRET:-change-this-jwt-secret}
+      - ENCRYPTION_KEYS=${ENCRYPTION_KEYS:-{"v1":"0123456789abcdef0123456789abcdef"}}
+      - ACTIVE_KEY_VERSION=${ACTIVE_KEY_VERSION:-v1}
+      - HMAC_KEY=${HMAC_KEY:-0123456789abcdef0123456789abcdef}
+      - GRPC_AI_HOST=ai-kg
+      - GRPC_AI_PORT=50051
+      - GRPC_CV_HOST=ai-cv
+      - GRPC_CV_PORT=50052
+      - REDIS_URL=redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-nutrix-redis-secret}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - nutrix
+
+  go-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - TZ=${TZ:-Asia/Ho_Chi_Minh}
+      - DB_DSN=${DB_DSN:-postgres://postgres:your_password_here@postgres:5432/nutrix?sslmode=disable}
+      - REDIS_URL=redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-nutrix-redis-secret}
+      - JWT_SECRET=${JWT_SECRET:-change-this-jwt-secret}
+      - ENCRYPTION_KEYS=${ENCRYPTION_KEYS:-{"v1":"0123456789abcdef0123456789abcdef"}}
+      - ACTIVE_KEY_VERSION=${ACTIVE_KEY_VERSION:-v1}
+      - HMAC_KEY=${HMAC_KEY:-0123456789abcdef0123456789abcdef}
+      - GRPC_AI_HOST=ai-kg
+      - GRPC_AI_PORT=50051
+      - GRPC_CV_HOST=ai-cv
+      - GRPC_CV_PORT=50052
+    ports:
+      - "${PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      go-seeder:
+        condition: service_completed_successfully
+      ai-kg:
+        condition: service_healthy
+      ai-cv:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ping >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - nutrix
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    depends_on:
+      go-backend:
+        condition: service_healthy
+    networks:
+      - nutrix
+
+networks:
+  nutrix:
+    driver: bridge
+
+volumes:
+  nutrix_postgres_data:
+  nutrix_redis_data:
+  nutrix_minio_data:
+  nutrix_ai_postgres_data:
+  nutrix_neo4j_data:
+  nutrix_neo4j_logs:
