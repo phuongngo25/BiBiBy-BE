@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - prometheus:9090
+
+  - job_name: go-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:8080
+        labels:
+          app: nutrix-go-backend
+          env: local
+
+  - job_name: cloudflared
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:20241
+        labels:
+          app: nutrix-cloudflared
+          env: local

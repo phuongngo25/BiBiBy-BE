@@ -26,6 +26,8 @@ import (
 	nutritionSvc "nutrix-backend/internal/nutrition/service"
 	nutritionUC "nutrix-backend/internal/nutrition/usecase"
 
+	productDelivery "nutrix-backend/internal/product/delivery"
+
 	userDelivery "nutrix-backend/internal/user/delivery"
 	userRepo "nutrix-backend/internal/user/repository"
 	userUC "nutrix-backend/internal/user/usecase"
@@ -222,6 +224,8 @@ func main() {
 		nutritionDelivery.NewGamificationHandler(protected, gamificationUCInst)
 		userDelivery.RegisterProfileRoutes(protected, uUC)
 		workoutDelivery.NewWorkoutHandler(protected, workoutUCInst)
+		// OpenFoodFacts reverse-proxy (same-origin for web; sets the UA OFF asks for).
+		productDelivery.NewOFFProxyHandler(protected, "NutriX/1.0 (https://bibiby.space)")
 	}
 	// -------------------------------------------------------------------------
 

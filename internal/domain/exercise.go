@@ -11,16 +11,16 @@ import (
 // Exercise maps to the AscendAPI exercise data cached in our Postgres DB.
 // AscendID has a unique index so we can safely upsert without duplicates.
 type Exercise struct {
-	ID               string         `json:"id"                 gorm:"primaryKey"`
-	AscendID         string         `json:"ascend_id"          gorm:"uniqueIndex;not null"`
-	Name             string         `json:"name"               gorm:"not null"`
-	TargetMuscle     string         `json:"target_muscle"`
-	BodyPart         string         `json:"body_part"`
-	Equipment        string         `json:"equipment"`
-	GifUrl           string         `json:"gif_url"`
-	VideoUrl         string         `json:"video_url"`
-	Instructions     string         `json:"instructions"`
-	MuscleHeatmapUrl string         `json:"muscle_heatmap_url"`
+	ID               string `json:"id"                 gorm:"primaryKey"`
+	AscendID         string `json:"ascend_id"          gorm:"uniqueIndex;not null"`
+	Name             string `json:"name"               gorm:"not null"`
+	TargetMuscle     string `json:"target_muscle"`
+	BodyPart         string `json:"body_part"`
+	Equipment        string `json:"equipment"`
+	GifUrl           string `json:"gif_url"`
+	VideoUrl         string `json:"video_url"`
+	Instructions     string `json:"instructions"`
+	MuscleHeatmapUrl string `json:"muscle_heatmap_url"`
 	// Legacy array fields — still used by ExerciseLog and migration
 	BodyParts     pq.StringArray `json:"body_parts"     gorm:"type:text[]"`
 	Equipments    pq.StringArray `json:"equipments"     gorm:"type:text[]"`
@@ -50,10 +50,17 @@ type WorkoutLog struct {
 }
 
 // LogWorkoutRequest is the input DTO for the POST /workouts/log endpoint.
+//
+// MetValue is optional. When supplied (> 0) it overrides the default MET so
+// activities with a known MET (e.g. the 2011 Compendium "Other Activities":
+// bicycling, calisthenics, …) burn the correct number of calories. Clients
+// that don't know the MET (the gym/resistance flow) omit it and the usecase
+// falls back to the default MET.
 type LogWorkoutRequest struct {
-	ExerciseID      string `json:"exercise_id"      binding:"required"`
-	ExerciseName    string `json:"exercise_name"    binding:"required"`
-	DurationMinutes int    `json:"duration_minutes" binding:"required,gt=0"`
+	ExerciseID      string  `json:"exercise_id"      binding:"required"`
+	ExerciseName    string  `json:"exercise_name"    binding:"required"`
+	DurationMinutes int     `json:"duration_minutes" binding:"required,gt=0"`
+	MetValue        float64 `json:"met_value"`
 }
 
 // WorkoutRepository defines the data access boundary for the workout module.
@@ -77,6 +84,13 @@ type WorkoutUseCase interface {
 	GetExerciseByID(ctx context.Context, id string) (*ExerciseDetail, error)
 	// LogWorkout calculates calories burned and persists the workout session.
 	LogWorkout(ctx context.Context, userID uuid.UUID, req *LogWorkoutRequest) (*WorkoutLog, error)
+	// GetMuscleHeatmap proxies the muscle-activation heatmap image for a muscle,
+	// returning the raw image bytes and Content-Type (keeps the API key server-side).
+	GetMuscleHeatmap(ctx context.Context, muscle string) ([]byte, string, error)
+	// GetExerciseAsset proxies an exercise image/GIF from the public CDN
+	// (same-origin) so Flutter web can load it despite the CDN missing CORS.
+	// token is the base64url-encoded CDN URL.
+	GetExerciseAsset(ctx context.Context, token string) ([]byte, string, error)
 }
 
 // ─── NEW PROXY DTOs ──────────────────────────────────────────────────────────
@@ -85,6 +99,7 @@ type ExerciseListItem struct {
 	ExerciseID    string   `json:"exercise_id"`
 	Name          string   `json:"name"`
 	ImageUrl      string   `json:"image_url"`
+	Equipment     string   `json:"equipment,omitempty"`
 	BodyParts     []string `json:"body_parts"`
 	TargetMuscles []string `json:"target_muscles"`
 }
@@ -102,4 +117,3 @@ type ExerciseDetail struct {
 	Equipments       []string `json:"equipments"`
 	MuscleHeatmapUrl string   `json:"muscle_heatmap_url"`
 }
-

@@ -83,6 +83,13 @@ services:
   neo4j:
     image: neo4j:5.18.1
     restart: unless-stopped
+    # On a user-defined network the container's auto hostname (= container ID) is
+    # unknown to Docker's embedded DNS, so neo4j's JVM getLocalHost() fails with
+    # "Temporary failure in name resolution" and crashes during logging setup.
+    # A fixed hostname + a static /etc/hosts self-mapping makes it resolvable.
+    hostname: neo4j
+    extra_hosts:
+      - "neo4j:127.0.0.1"
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
       NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-password123}
@@ -134,6 +141,16 @@ services:
       context: ../AI_server/Computer_Vision
       dockerfile: Dockerfile
     restart: unless-stopped
+    # Expose the host NVIDIA GPU to the container so the CV model runs on CUDA.
+    # Requires the NVIDIA driver on the host + GPU support in Docker (WSL2).
+    # If no GPU is present the service still starts: worker.py falls back to CPU.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
       NEO4J_URI: bolt://neo4j:7687
@@ -212,6 +229,7 @@ services:
       - GRPC_AI_PORT=50051
       - GRPC_CV_HOST=ai-cv
       - GRPC_CV_PORT=50052
+      - RAPIDAPI_KEY=${RAPIDAPI_KEY:-}
     ports:
       - "${PORT:-8080}:8080"
     depends_on:

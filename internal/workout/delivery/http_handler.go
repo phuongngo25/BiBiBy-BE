@@ -19,6 +19,7 @@ type WorkoutHandler struct {
 // NewWorkoutHandler registers the workout routes onto the provided protected RouterGroup.
 //
 //	GET  /api/v1/exercises?bodyparts=pectorals
+//	GET  /api/v1/exercises/heatmap?muscle=spine
 //	GET  /api/v1/exercises/:id
 //	POST /api/v1/workouts/log
 func NewWorkoutHandler(rg *gin.RouterGroup, useCase domain.WorkoutUseCase) {
@@ -27,6 +28,9 @@ func NewWorkoutHandler(rg *gin.RouterGroup, useCase domain.WorkoutUseCase) {
 	workoutGroup := rg.Group("/exercises")
 	{
 		workoutGroup.GET("", handler.GetExercisesByBodyParts)
+		// Static routes registered before the "/:id" wildcard.
+		workoutGroup.GET("/heatmap", handler.GetMuscleHeatmap)
+		workoutGroup.GET("/asset", handler.GetExerciseAsset)
 		workoutGroup.GET("/:id", handler.GetExerciseByID)
 	}
 
@@ -77,6 +81,51 @@ func (h *WorkoutHandler) GetExerciseByID(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, detail)
+}
+
+// GetMuscleHeatmap handles GET /api/v1/exercises/heatmap?muscle={muscle}
+// It proxies the muscle-activation image so the RapidAPI key stays server-side.
+func (h *WorkoutHandler) GetMuscleHeatmap(c *gin.Context) {
+	muscle := strings.TrimSpace(c.Query("muscle"))
+	if muscle == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query parameter 'muscle' is required"})
+		return
+	}
+
+	data, contentType, err := h.useCase.GetMuscleHeatmap(c.Request.Context(), muscle)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+
+	if contentType == "" {
+		contentType = "image/jpeg"
+	}
+	c.Data(http.StatusOK, contentType, data)
+}
+
+// GetExerciseAsset handles GET /api/v1/exercises/asset?u={base64url}
+// It proxies an exercise image/GIF from the CDN so the browser loads it
+// same-origin (the CDN sends no CORS headers).
+func (h *WorkoutHandler) GetExerciseAsset(c *gin.Context) {
+	token := strings.TrimSpace(c.Query("u"))
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query parameter 'u' is required"})
+		return
+	}
+
+	data, contentType, err := h.useCase.GetExerciseAsset(c.Request.Context(), token)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	// CDN assets are immutable; let the browser/Cloudflare cache them.
+	c.Header("Cache-Control", "public, max-age=86400")
+	c.Data(http.StatusOK, contentType, data)
 }
 
 // LogWorkout handles POST /api/v1/workouts/log

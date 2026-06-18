@@ -1391,30 +1391,81 @@ func (u *nutritionUseCase) ReoptimizePlan(ctx context.Context, userID uuid.UUID,
 
 	// Apply adjustment
 	if req.Adjustment.Type == "swap_meal" {
-		for i, meal := range newPlan.Meals {
-			if meal.Date == req.Adjustment.TargetDate && meal.MealType == req.Adjustment.TargetMealType {
-				// Analyze the replacement
+		// A "swap" must yield a *different* dish. The client has no
+		// alternative-food picker, so it sends the meal's current food as the
+		// "preferred" id — we can't trust it to differ. Instead we pull a pool
+		// of candidates (same pipeline as generation), skip the food already in
+		// the slot, and pick the first safe one the KG accepts.
+		portfolio := u.loadPlannerPortfolio(ctx, userID)
+		userProfile, _ := u.userRepo.GetByID(ctx, userID)
+
+		pool, err := u.repo.GetRandomFoods(ctx, 40)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load swap candidates: %w", err)
+		}
+		pool = sortPlannerFoodsByPortfolio(pool, portfolio)
+
+		for i := range newPlan.Meals {
+			meal := newPlan.Meals[i]
+			if meal.Date != req.Adjustment.TargetDate || meal.MealType != req.Adjustment.TargetMealType {
+				continue
+			}
+
+			currentFoodID := ""
+			if len(meal.FoodIDs) > 0 {
+				currentFoodID = meal.FoodIDs[0]
+			}
+
+			replaced := false
+			attempts := 0
+			for _, food := range pool {
+				foodID := food.ID.String()
+				if foodID == currentFoodID {
+					continue // never "swap" a meal for itself
+				}
+				if !plannerFoodAllowedByProfile(food, userProfile, portfolio) {
+					continue
+				}
+				if attempts >= 20 {
+					break // bound the number of sequential KG calls
+				}
+				attempts++
+
 				candidate := domain.CandidateMeal{
-					MealID:   meal.MealID,
-					FoodIDs:  []string{req.Adjustment.PreferredFoodID},
-					MealType: meal.MealType,
+					MealID:         meal.MealID,
+					FoodIDs:        []string{foodID},
+					MealType:       meal.MealType,
+					Ingredients:    plannerTerms(food.Name, food.NameEn, food.NameVi),
+					Categories:     plannerTerms(food.Category, food.Source),
+					ProteinSources: plannerTerms(food.Name, food.NameEn, food.Category),
 				}
 
-				analyzeReq := &domain.AnalyzeMealRequest{
-					Candidate: candidate,
-				}
-
-				analyzeResp, err := u.kgPort.AnalyzeMeal(ctx, analyzeReq)
+				analyzeResp, err := u.kgPort.AnalyzeMeal(ctx, &domain.AnalyzeMealRequest{Candidate: candidate})
 				if err != nil {
 					return nil, fmt.Errorf("failed to analyze substitute meal: %w", err)
 				}
 
-				if analyzeResp.Status == "REJECTED" {
-					return nil, domain.ErrAllCandidatesRejected // Reuse error for safety
+				// Accept safe meals; KG-unavailable is a coverage gap (DB foods
+				// are pre-filtered), same as generation. Skip only hard REJECTED.
+				if analyzeResp.Status == "APPROVED" || analyzeResp.Status == "WARNING" || plannerKGUnavailable(analyzeResp) {
+					status := analyzeResp.Status
+					if status == "REJECTED" || status == "" {
+						status = "WARNING"
+					}
+					newPlan.Meals[i].FoodIDs = []string{foodID}
+					newPlan.Meals[i].Status = status
+					newPlan.Meals[i].FoodName = nonEmptyPlanner(food.Name, food.NameEn, food.NameVi, foodID)
+					newPlan.Meals[i].Calories = food.CaloriesPer100g
+					newPlan.Meals[i].Protein = food.ProteinPer100g
+					newPlan.Meals[i].Carbs = food.CarbsPer100g
+					newPlan.Meals[i].Fat = food.FatPer100g
+					replaced = true
+					break
 				}
+			}
 
-				newPlan.Meals[i].FoodIDs = []string{req.Adjustment.PreferredFoodID}
-				newPlan.Meals[i].Status = analyzeResp.Status
+			if !replaced {
+				return nil, domain.ErrAllCandidatesRejected
 			}
 		}
 	}

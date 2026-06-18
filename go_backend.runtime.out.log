@@ -43,3 +43,30 @@
 [GIN-debug] GET    /api/v1/exercises         --> nutrix-backend/internal/workout/delivery.(*WorkoutHandler).GetExercisesByBodyParts-fm (9 handlers)
 [GIN-debug] GET    /api/v1/exercises/:id     --> nutrix-backend/internal/workout/delivery.(*WorkoutHandler).GetExerciseByID-fm (9 handlers)
 [GIN-debug] POST   /api/v1/workouts/log      --> nutrix-backend/internal/workout/delivery.(*WorkoutHandler).LogWorkout-fm (9 handlers)
+
+2026/06/18 14:46:23 [31;1mC:/Users/Tunnne/Downloads/code/go_backend/internal/user/repository/postgres_user_portfolio.go:24 [35;1mrecord not found
+[0m[33m[1.659ms] [34;1m[rows:0][0m SELECT * FROM "user_portfolios" WHERE user_id = 'd833fe4c-30ef-4518-b557-082eb00346d9' ORDER BY "user_portfolios"."user_id" LIMIT 1
+
+2026/06/18 14:46:23 [31;1mC:/Users/Tunnne/Downloads/code/go_backend/internal/user/repository/postgres_user_portfolio.go:24 [35;1mrecord not found
+[0m[33m[2.860ms] [34;1m[rows:0][0m SELECT * FROM "user_portfolios" WHERE user_id = 'd833fe4c-30ef-4518-b557-082eb00346d9' ORDER BY "user_portfolios"."user_id" LIMIT 1
+
+2026/06/18 14:46:23 [31;1mC:/Users/Tunnne/Downloads/code/go_backend/internal/user/repository/postgres_user_portfolio.go:24 [35;1mrecord not found
+[0m[33m[1.155ms] [34;1m[rows:0][0m SELECT * FROM "user_portfolios" WHERE user_id = 'd833fe4c-30ef-4518-b557-082eb00346d9' ORDER BY "user_portfolios"."user_id" LIMIT 1
+
+2026/06/18 14:46:23 [31;1mC:/Users/Tunnne/Downloads/code/go_backend/internal/user/repository/postgres_user_portfolio.go:24 [35;1mrecord not found
+[0m[33m[1.032ms] [34;1m[rows:0][0m SELECT * FROM "user_portfolios" WHERE user_id = 'd833fe4c-30ef-4518-b557-082eb00346d9' ORDER BY "user_portfolios"."user_id" LIMIT 1
+
+2026/06/18 14:46:52 [31;1mC:/Users/Tunnne/Downloads/code/go_backend/internal/user/repository/postgres_user_portfolio.go:24 [35;1mrecord not found
+[0m[33m[2.810ms] [34;1m[rows:0][0m SELECT * FROM "user_portfolios" WHERE user_id = 'd833fe4c-30ef-4518-b557-082eb00346d9' ORDER BY "user_portfolios"."user_id" LIMIT 1
+
+2026/06/18 14:47:08 [31;1mC:/Users/Tunnne/Downloads/code/go_backend/internal/user/repository/postgres_user_portfolio.go:24 [35;1mrecord not found
+[0m[33m[1.034ms] [34;1m[rows:0][0m SELECT * FROM "user_portfolios" WHERE user_id = 'd833fe4c-30ef-4518-b557-082eb00346d9' ORDER BY "user_portfolios"."user_id" LIMIT 1
+
+2026/06/18 14:47:14 [31;1mC:/Users/Tunnne/Downloads/code/go_backend/internal/user/repository/postgres_user_portfolio.go:24 [35;1mrecord not found
+[0m[33m[1.758ms] [34;1m[rows:0][0m SELECT * FROM "user_portfolios" WHERE user_id = 'd833fe4c-30ef-4518-b557-082eb00346d9' ORDER BY "user_portfolios"."user_id" LIMIT 1
+
+2026/06/18 14:49:22 [31;1mC:/Users/Tunnne/Downloads/code/go_backend/internal/user/repository/postgres_user_portfolio.go:24 [35;1mrecord not found
+[0m[33m[0.532ms] [34;1m[rows:0][0m SELECT * FROM "user_portfolios" WHERE user_id = 'd833fe4c-30ef-4518-b557-082eb00346d9' ORDER BY "user_portfolios"."user_id" LIMIT 1
+
+2026/06/18 14:49:28 [31;1mC:/Users/Tunnne/Downloads/code/go_backend/internal/user/repository/postgres_user_portfolio.go:24 [35;1mrecord not found
+[0m[33m[3.706ms] [34;1m[rows:0][0m SELECT * FROM "user_portfolios" WHERE user_id = 'd833fe4c-30ef-4518-b557-082eb00346d9' ORDER BY "user_portfolios"."user_id" LIMIT 1
