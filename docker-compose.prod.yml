@@ -161,6 +161,13 @@ services:
       NUTRIX_HTTP_HOST: 0.0.0.0
       NUTRIX_HTTP_PORT: "8081"
       NUTRIX_MODEL_DEVICE: ${NUTRIX_MODEL_DEVICE:-cpu}
+      # Per-image mass estimation: Nutrition5k regressor on real Depth-Anything
+      # depth. Without this the engine defaults to "disabled" and uses the
+      # legacy MVDT volume×density path, which is fed a CONSTANT depth (0.5) and
+      # collapses to a near-constant volume — so every photo of the same dish
+      # returns an identical mass. Weights are bundled in the image at the
+      # config.py default paths (CV/weights/nutrition5k_model, depth_anything_v2_relative).
+      NUTRIX_DIRECT_MASS_MODE: ${NUTRIX_DIRECT_MASS_MODE:-primary}
       NUTRIX_MINIO_ENDPOINT: http://minio:9000
       NUTRIX_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       NUTRIX_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
@@ -255,9 +262,14 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    command: >
+      tunnel --no-autoupdate
+      --metrics 0.0.0.0:20241
+      run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     environment:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      - "20241:20241"
     depends_on:
       go-backend:
         condition: service_healthy

@@ -30,6 +30,8 @@ func NewNutritionHandler(rg *gin.RouterGroup, uc domain.NutritionUseCase) {
 	rg.GET("/nutrition/foods/search", h.SearchFoods)
 	rg.POST("/nutrition/foods/upload-image", h.UploadFoodImage)
 	rg.POST("/nutrition/foods/estimate", h.EstimateNutrition)
+	rg.POST("/nutrition/foods/scan", h.ScanFood)
+	rg.GET("/nutrition/foods/by-label", h.GetFoodsByLabel)
 	rg.POST("/nutrition/foods", h.CreateFood)
 	rg.GET("/nutrition/daily-plan", h.GetDailyPlan)
 	rg.POST("/nutrition/log-meal", h.LogMeal)
@@ -507,6 +509,59 @@ func (h *NutritionHandler) EstimateNutrition(c *gin.Context) {
 	log.Printf("[CV] EstimateNutrition success filename=%s food_id=%s name=%s quantity_grams=%.2f method=%s",
 		file.Filename, result.FoodID, result.Name, result.QuantityGrams, result.EstimateMethod)
 	c.JSON(http.StatusOK, result)
+}
+
+// ScanFood godoc
+// POST /api/v1/nutrition/foods/scan  (multipart field: image)
+// Returns the classifier's top-K dish categories + confidence for the picker UX.
+func (h *NutritionHandler) ScanFood(c *gin.Context) {
+	file, err := c.FormFile("image")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image file is required"})
+		return
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open image file"})
+		return
+	}
+	defer src.Close()
+
+	buf := new(bytes.Buffer)
+	if _, err := io.Copy(buf, src); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read image file"})
+		return
+	}
+	imageBytes := buf.Bytes()
+
+	result, err := h.uc.ScanFoodCandidates(c.Request.Context(), imageBytes)
+	if err != nil {
+		log.Printf("[CV] ScanFood failed filename=%s error=%v", file.Filename, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	log.Printf("[CV] ScanFood success filename=%s candidates=%d", file.Filename, len(result.Candidates))
+	c.JSON(http.StatusOK, result)
+}
+
+// GetFoodsByLabel godoc
+// GET /api/v1/nutrition/foods/by-label?label=<cv_label>
+// Returns the concrete dishes mapped to a CV category label (e.g. "pho").
+func (h *NutritionHandler) GetFoodsByLabel(c *gin.Context) {
+	label := c.Query("label")
+	if label == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query param 'label' is required"})
+		return
+	}
+
+	foods, err := h.uc.GetFoodsByLabel(c.Request.Context(), label)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, foods)
 }
 
 // GetThresholds godoc

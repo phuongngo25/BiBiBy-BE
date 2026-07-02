@@ -253,7 +253,11 @@ func (u *nutritionUseCase) LogMeal(ctx context.Context, userID uuid.UUID, req *d
 	if err != nil {
 		date = time.Now()
 	}
-	ratio := req.QuantityGrams / 100.0
+	refWeight := 100.0
+	if req.ReferenceWeightG != nil && *req.ReferenceWeightG > 0 {
+		refWeight = *req.ReferenceWeightG
+	}
+	ratio := req.QuantityGrams / refWeight
 	mealLog := &domain.MealLog{
 		UserID:           userID,
 		FoodID:           food.ID,
@@ -535,12 +539,14 @@ func (u *nutritionUseCase) UpdateFoodLog(ctx context.Context, userID, logID uuid
 		if err != nil {
 			return err
 		}
-		ratio := quantity / 100.0
+		// Scale proportionally from original logged values so any initial
+		// reference-weight correction is preserved across edits.
+		ratio := quantity / log.QuantityGrams
+		log.CaloriesConsumed = log.CaloriesConsumed * ratio
+		log.ProteinConsumed = log.ProteinConsumed * ratio
+		log.FatConsumed = log.FatConsumed * ratio
+		log.CarbsConsumed = log.CarbsConsumed * ratio
 		log.QuantityGrams = quantity
-		log.CaloriesConsumed = log.Food.CaloriesPer100g * ratio
-		log.ProteinConsumed = log.Food.ProteinPer100g * ratio
-		log.FatConsumed = log.Food.FatPer100g * ratio
-		log.CarbsConsumed = log.Food.CarbsPer100g * ratio
 		if err := txRepo.UpdateMealLog(ctx, log); err != nil {
 			return err
 		}
@@ -653,6 +659,174 @@ func (u *nutritionUseCase) EstimateNutrition(ctx context.Context, imageBytes []b
 		ServingSize: result.MassG, ServingUnit: "g", Source: "ai",
 		EstimateMethod: "nutrition5k_depth_anything",
 	}, nil
+}
+
+// ScanFoodCandidates returns the classifier's top-K dish categories + confidence
+// for the picker UX. Unlike EstimateNutrition it does NOT auto-resolve to a single
+// dish, and it tolerates low top-1 confidence (the user picks).
+func (u *nutritionUseCase) ScanFoodCandidates(ctx context.Context, imageBytes []byte) (*domain.FoodScanResponse, error) {
+	if u.cvPort == nil {
+		return nil, fmt.Errorf("CV service unavailable")
+	}
+	result, err := u.cvPort.ScanFoodCandidates(ctx, imageBytes)
+	if err != nil {
+		return nil, fmt.Errorf("could not scan image: %w", err)
+	}
+
+	candidates := make([]domain.FoodScanCandidate, 0, len(result.Predictions))
+	for _, p := range result.Predictions {
+		if p.FoodLabel == "" || p.FoodLabel == "unknown" {
+			continue
+		}
+		candidates = append(candidates, domain.FoodScanCandidate{
+			FoodLabel:   p.FoodLabel,
+			DisplayName: aiFoodDisplayName(p.FoodLabel),
+			Confidence:  p.Confidence,
+			MassG:       p.MassG,
+		})
+	}
+
+	// Fallback for older AI servers that don't populate the top-K list:
+	// synthesize a single candidate from the legacy top-1 fields.
+	if len(candidates) == 0 && result.FoodLabel != "" && result.FoodLabel != "unknown" {
+		candidates = append(candidates, domain.FoodScanCandidate{
+			FoodLabel:   result.FoodLabel,
+			DisplayName: aiFoodDisplayName(result.FoodLabel),
+			Confidence:  result.FoodLabelConfidence,
+			MassG:       result.MassG,
+		})
+	}
+
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("ai could not recognize food in image")
+	}
+	return &domain.FoodScanResponse{Candidates: candidates}, nil
+}
+
+// maxFoodsByLabel caps the dish list returned for a CV category (picker UX).
+const maxFoodsByLabel = 40
+
+// GetFoodsByLabel returns the concrete dishes mapped to a CV category label
+// without collapsing to one (the un-collapsed form of resolveAIFood). Results
+// are relevance-filtered (the SQL search uses loose trigram matching, so we drop
+// rows whose name doesn't actually contain the label/synonyms), deduped by name,
+// and capped; the curated registry dish is surfaced first.
+func (u *nutritionUseCase) GetFoodsByLabel(ctx context.Context, label string) ([]domain.Food, error) {
+	normalized := strings.ReplaceAll(strings.TrimSpace(strings.ToLower(label)), " ", "_")
+	if normalized == "" {
+		return nil, fmt.Errorf("label is required")
+	}
+
+	// Build the set of relevance tokens: the label words + every synonym term.
+	matchTokens := []string{normalizeCatalogText(strings.ReplaceAll(normalized, "_", " "))}
+	for _, term := range aiCatalogSearchTerms(normalized) {
+		if nt := normalizeCatalogText(term); nt != "" {
+			matchTokens = append(matchTokens, nt)
+		}
+	}
+	fields := func(f domain.Food) []string {
+		return []string{
+			normalizeCatalogText(f.Name),
+			normalizeCatalogText(f.NameEn),
+			normalizeCatalogText(f.NameVi),
+		}
+	}
+	isRelevant := func(f domain.Food) bool {
+		fs := fields(f)
+		joined := strings.Join(fs, " ")
+		for _, tok := range matchTokens {
+			if tok == "" {
+				continue
+			}
+			if strings.Contains(tok, " ") {
+				// Multi-word synonym (e.g. "broken rice", "beef noodle soup") is
+				// specific enough to match anywhere in the name.
+				if strings.Contains(joined, tok) {
+					return true
+				}
+				continue
+			}
+			// Single short word (e.g. "pho") must LEAD a name. Accent-stripping
+			// collides phở (noodle) with phớ (tào phớ / tofu pudding) — both "pho";
+			// requiring the dish-type word to lead the name avoids the false match.
+			for _, ft := range fs {
+				if ft == tok || strings.HasPrefix(ft, tok+" ") {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	out := make([]domain.Food, 0, 16)
+	seen := make(map[string]struct{})
+	addFood := func(f domain.Food, force bool) {
+		if len(out) >= maxFoodsByLabel {
+			return
+		}
+		if !force && !isRelevant(f) {
+			return
+		}
+		// Dedup by normalized name so identical dishes (same name, duplicate rows)
+		// collapse into one picker entry.
+		key := normalizeCatalogText(f.Name)
+		if key == "" {
+			key = f.ID.String()
+		}
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		out = append(out, f)
+	}
+	add := func(foods []domain.Food) {
+		for i := range foods {
+			addFood(foods[i], false)
+		}
+	}
+
+	// 1. Canonical dish from the registry UUID (curated match surfaced first,
+	//    forced in even if the relevance heuristic would skip it).
+	if dishIDStr, exists := AIFoodRegistry[normalized]; exists {
+		if id, err := uuid.Parse(dishIDStr); err == nil {
+			if f, err := u.repo.GetFoodByID(ctx, id); err == nil && f != nil {
+				addFood(*f, true)
+			}
+		}
+	}
+
+	// 2. Stable catalog code search.
+	if code, exists := AIFoodCatalogCodeRegistry[normalized]; exists {
+		if foods, err := u.repo.SearchFoods(ctx, code); err == nil {
+			add(foods)
+		}
+	}
+
+	// 3. Synonym / display-term searches.
+	for _, term := range aiCatalogSearchTerms(normalized) {
+		if foods, err := u.repo.SearchFoods(ctx, term); err == nil {
+			add(foods)
+		}
+	}
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no dishes found for label %q", label)
+	}
+	return out, nil
+}
+
+// aiFoodDisplayName maps a normalized CV label to a user-facing Vietnamese name
+// for the scan picker. Falls back to a title-cased label when missing.
+func aiFoodDisplayName(label string) string {
+	label = strings.TrimSpace(strings.ToLower(label))
+	if name, ok := aiFoodDisplayNames[label]; ok {
+		return name
+	}
+	words := strings.Fields(strings.ReplaceAll(label, "_", " "))
+	for i, w := range words {
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
+	}
+	return strings.Join(words, " ")
 }
 
 func (u *nutritionUseCase) resolveAIFood(ctx context.Context, aiLabel string) (*domain.Food, error) {
@@ -1157,7 +1331,7 @@ func plannerFoodAllowedByProfile(food domain.Food, user *domain.User, portfolio 
 		if allergy == "" {
 			continue
 		}
-		if strings.Contains(terms, allergy) {
+		if containsPlannerTerm(terms, allergenDetectionTerms(allergy)...) {
 			return false
 		}
 	}
@@ -1254,6 +1428,69 @@ func containsPlannerTerm(haystack string, needles ...string) bool {
 		}
 	}
 	return false
+}
+
+// allergenDetectionTerms maps a declared allergy to the food/ingredient terms
+// that signal its presence. A food's searchable text holds product and
+// ingredient names ("milk", "cheese") and rarely the allergy word itself
+// ("dairy"), so a literal match misses most cases. Widening each allergen to
+// its common sources makes detection actually fire. Unknown allergies fall back
+// to the literal term, preserving prior behaviour.
+func allergenDetectionTerms(allergy string) []string {
+	switch allergy {
+	case "seafood", "shellfish":
+		return []string{allergy, "shrimp", "prawn", "fish", "crab", "lobster", "clam", "oyster", "mussel", "scallop", "squid", "octopus"}
+	case "fish":
+		return []string{"fish", "salmon", "tuna", "cod", "anchovy", "sardine", "mackerel", "tilapia", "trout"}
+	case "dairy", "milk":
+		return []string{"dairy", "milk", "cheese", "butter", "cream", "yogurt", "yoghurt", "lactose", "whey", "casein"}
+	case "egg":
+		return []string{"egg", "mayonnaise", "mayo", "albumin", "omelette", "omelet"}
+	case "peanut":
+		return []string{"peanut", "groundnut"}
+	case "tree nut":
+		return []string{"almond", "walnut", "cashew", "pecan", "pistachio", "hazelnut", "macadamia", "pine nut"}
+	case "soy":
+		return []string{"soy", "soya", "tofu", "edamame", "miso", "tempeh", "soybean"}
+	case "gluten", "wheat":
+		return []string{"gluten", "wheat", "bread", "flour", "barley", "rye", "pasta", "noodle", "cracker", "biscuit"}
+	case "grain":
+		return []string{"grain", "wheat", "barley", "rye", "oat", "corn", "cereal"}
+	case "sesame":
+		return []string{"sesame", "tahini"}
+	case "sulfite":
+		return []string{"sulfite", "sulphite", "wine", "dried fruit"}
+	case "mustard":
+		return []string{"mustard"}
+	case "celery":
+		return []string{"celery", "celeriac"}
+	default:
+		return []string{allergy}
+	}
+}
+
+// conditionDetectionTerms maps a medical condition to food/ingredient terms that
+// warrant a dietary WARNING (not a hard block). This complements the Knowledge
+// Graph (which gates the image scanner): it lets the local meal-validation path
+// surface condition-relevant warnings for DB foods. Conditions not listed here
+// return nil and are simply skipped — the KG remains the authority for them.
+func conditionDetectionTerms(condition string) []string {
+	switch condition {
+	case "celiac":
+		return []string{"gluten", "wheat", "bread", "flour", "barley", "rye", "pasta", "noodle"}
+	case "lactose_intolerance":
+		return []string{"milk", "cheese", "butter", "cream", "yogurt", "yoghurt", "lactose", "dairy"}
+	case "hyperlipidemia", "heart_failure":
+		return []string{"butter", "lard", "cream", "cheese", "fried", "bacon", "sausage", "coconut oil", "palm oil"}
+	case "hypertension":
+		return []string{"salt", "salty", "soy sauce", "pickled", "cured", "bacon", "sausage", "instant noodle"}
+	case "diabetes", "nafld":
+		return []string{"sugar", "syrup", "candy", "soda", "dessert", "cake", "sweet", "honey"}
+	case "gout":
+		return []string{"liver", "anchovy", "sardine", "shellfish", "organ meat", "red meat"}
+	default:
+		return nil
+	}
 }
 
 func plannerTerms(values ...string) []string {
@@ -1686,22 +1923,32 @@ func ingredientProfileViolations(foodID string, food domain.Food, enrichment *do
 		if allergy == "" {
 			continue
 		}
-		if allergy == "seafood" || allergy == "shellfish" {
-			if containsPlannerTerm(terms, allergy, "shrimp", "fish", "crab", "lobster", "clam", "oyster") {
-				violations = append(violations, domain.MealViolation{
-					ViolationType:    "allergy_" + allergy,
-					Description:      fmt.Sprintf("%s may violate your %s allergy", enrichment.DishName, allergy),
-					Severity:         "CRITICAL",
-					OffendingFoodIDs: []string{foodID},
-				})
-			}
-			continue
-		}
-		if strings.Contains(terms, allergy) {
+		if containsPlannerTerm(terms, allergenDetectionTerms(allergy)...) {
 			violations = append(violations, domain.MealViolation{
 				ViolationType:    "allergy_" + allergy,
-				Description:      fmt.Sprintf("%s contains or may contain %s", enrichment.DishName, allergy),
+				Description:      fmt.Sprintf("%s may violate your %s allergy", enrichment.DishName, allergy),
 				Severity:         "CRITICAL",
+				OffendingFoodIDs: []string{foodID},
+			})
+		}
+	}
+
+	// Medical conditions surface as WARNINGs (informative, not a hard block) so
+	// they never silently turn a meal REJECTED in the planner. The Knowledge
+	// Graph remains the authority for the image scanner path.
+	for _, condition := range splitPlannerCSV(user.MedicalConditions) {
+		if condition == "" || condition == "none" {
+			continue
+		}
+		condTerms := conditionDetectionTerms(condition)
+		if len(condTerms) == 0 {
+			continue
+		}
+		if containsPlannerTerm(terms, condTerms...) {
+			violations = append(violations, domain.MealViolation{
+				ViolationType:    "condition_" + condition,
+				Description:      fmt.Sprintf("%s may not suit your %s — review portion or choose an alternative", enrichment.DishName, strings.ReplaceAll(condition, "_", " ")),
+				Severity:         "WARNING",
 				OffendingFoodIDs: []string{foodID},
 			})
 		}
@@ -1892,6 +2139,41 @@ var AIFoodRegistry = map[string]string{
 
 var AIFoodCatalogCodeRegistry = map[string]string{
 	"pho": "vfa_dish_SFF-112002",
+}
+
+// aiFoodDisplayNames maps the 30 classifier labels to user-facing Vietnamese names
+// shown in the scan picker (e.g. "pho" → "Phở").
+var aiFoodDisplayNames = map[string]string{
+	"banh_beo":         "Bánh bèo",
+	"banh_bot_loc":     "Bánh bột lọc",
+	"banh_can":         "Bánh căn",
+	"banh_canh":        "Bánh canh",
+	"banh_chung":       "Bánh chưng",
+	"banh_cuon":        "Bánh cuốn",
+	"banh_duc":         "Bánh đúc",
+	"banh_gio":         "Bánh giò",
+	"banh_khot":        "Bánh khọt",
+	"banh_mi":          "Bánh mì",
+	"banh_pia":         "Bánh pía",
+	"banh_tet":         "Bánh tét",
+	"banh_trang_nuong": "Bánh tráng nướng",
+	"banh_xeo":         "Bánh xèo",
+	"bun_bo_hue":       "Bún bò Huế",
+	"bun_dau_mam_tom":  "Bún đậu mắm tôm",
+	"bun_mam":          "Bún mắm",
+	"bun_rieu":         "Bún riêu",
+	"bun_thit_nuong":   "Bún thịt nướng",
+	"ca_kho_to":        "Cá kho tộ",
+	"canh_chua":        "Canh chua",
+	"cao_lau":          "Cao lầu",
+	"chao_long":        "Cháo lòng",
+	"com_tam":          "Cơm tấm",
+	"goi_cuon":         "Gỏi cuốn",
+	"hu_tieu":          "Hủ tiếu",
+	"mi_quang":         "Mì Quảng",
+	"nem_chua":         "Nem chua",
+	"pho":              "Phở",
+	"xoi_xeo":          "Xôi xéo",
 }
 
 func mapComplexResultsToFoods(recipes []spoonacular.RecipeResult) []domain.Food {

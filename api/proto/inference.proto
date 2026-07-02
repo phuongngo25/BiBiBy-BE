@@ -105,6 +105,21 @@ message EstimateVolumeRequest {
   bytes image_data = 1;
 }
 
+// One candidate dish from the classifier's top-K softmax distribution.
+// Used to let the user pick from several likely dishes instead of forcing top-1.
+message FoodPrediction {
+  // Normalized classification label (e.g., "pho", "com_tam").
+  string food_label = 1;
+
+  // Softmax probability for this candidate [0.0, 1.0].
+  float confidence = 2;
+
+  // Estimated mass in grams for THIS candidate (shared volume × per-class density).
+  // Mass differs per candidate in legacy density mode; identical across candidates
+  // in direct-mass mode. 0 when density for the label is unknown.
+  float mass_g = 3;
+}
+
 message EstimateVolumeResponse {
   // Server-generated request ID for end-to-end tracing.
   string request_id = 1;
@@ -141,4 +156,8 @@ message EstimateVolumeResponse {
   string classifier_version = 12;
   string volume_version = 13;
   string density_version = 14;
+
+  // Top-K classifier candidates (sorted descending by confidence).
+  // food_label/food_label_confidence above remain the top-1 for backward compat.
+  repeated FoodPrediction food_predictions = 15;
 }

@@ -78,10 +78,15 @@ func (MealLog) TableName() string {
 
 // LogMealRequest is the input payload for tracking a food consumption event.
 type LogMealRequest struct {
-	FoodID        uuid.UUID `json:"food_id"        binding:"required"`
-	QuantityGrams float64   `json:"quantity_grams" binding:"required,gt=0,lte=5000"`
-	MealType      string    `json:"meal_type"      binding:"required"`
-	ConsumedDate  string    `json:"consumed_date"  binding:"required"`
+	FoodID           uuid.UUID `json:"food_id"            binding:"required"`
+	QuantityGrams    float64   `json:"quantity_grams"     binding:"required,gt=0,lte=5000"`
+	MealType         string    `json:"meal_type"          binding:"required"`
+	ConsumedDate     string    `json:"consumed_date"      binding:"required"`
+	// ReferenceWeightG is the serving weight (in grams) that corresponds to the
+	// food's CaloriesPer100g value. Some seeded foods store per-serving calories
+	// under CaloriesPer100g without a real 100 g basis. When provided, the ratio
+	// is computed as QuantityGrams / ReferenceWeightG instead of / 100.
+	ReferenceWeightG *float64  `json:"reference_weight_g,omitempty"`
 }
 
 // CreateFoodRequest is the input payload for adding a custom food item.
@@ -238,6 +243,12 @@ type NutritionUseCase interface {
 	ExplainFood(ctx context.Context, userID uuid.UUID, foodID string) (*FoodExplanation, error)
 	GetRecommendations(ctx context.Context, userID uuid.UUID, req *GetRecommendationsRequest) (*GetRecommendationsResponse, error)
 	EstimateNutrition(ctx context.Context, imageBytes []byte) (*FoodEstimateResponse, error)
+	// ScanFoodCandidates returns the classifier's top-K dish categories + confidence
+	// for the picker UX (does not auto-resolve to a single dish).
+	ScanFoodCandidates(ctx context.Context, imageBytes []byte) (*FoodScanResponse, error)
+	// GetFoodsByLabel returns the list of concrete dishes mapped to a CV category
+	// label (e.g. "pho" → "Phở Thìn", "Phở Bát Đàn"…), without collapsing to one.
+	GetFoodsByLabel(ctx context.Context, label string) ([]Food, error)
 	GetStreak(ctx context.Context, userID uuid.UUID) (*UserStreak, error)
 	UpdateFoodLog(ctx context.Context, userID, logID uuid.UUID, quantity float64) (*MealLog, error)
 	GetJobStatus(ctx context.Context, jobID string) (*JobStatusResponse, error)
@@ -331,4 +342,17 @@ type FoodEstimateResponse struct {
 	ServingUnit     string    `json:"serving_unit"`
 	Source          string    `json:"source"`
 	EstimateMethod  string    `json:"estimate_method"`
+}
+
+// FoodScanCandidate is one entry in the top-K picker shown after a photo capture.
+type FoodScanCandidate struct {
+	FoodLabel   string  `json:"food_label"`   // normalized CV label, e.g. "pho"
+	DisplayName string  `json:"display_name"` // user-facing, e.g. "Phở"
+	Confidence  float64 `json:"confidence"`   // softmax probability [0..1]
+	MassG       float64 `json:"mass_g"`       // estimated grams for this candidate
+}
+
+// FoodScanResponse is the DTO returned by POST /nutrition/foods/scan.
+type FoodScanResponse struct {
+	Candidates []FoodScanCandidate `json:"candidates"`
 }

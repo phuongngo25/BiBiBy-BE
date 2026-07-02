@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NutriX CV Upgrade — Top-K Food Picker Plan</title>
+<style>
+  :root {
+    --bg: #0a1410;
+    --panel: #0f1d17;
+    --panel-2: #13261d;
+    --border: #1f3a2c;
+    --text: #d7e6dd;
+    --muted: #8aa697;
+    --accent: #3ddc84;
+    --accent-dim: #2a9d63;
+    --warn: #ffb454;
+    --danger: #ff6b6b;
+    --code-bg: #07100c;
+    --blue: #5ab0ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.6;
+    font-size: 16px;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 32px 24px 96px; }
+  header.hero {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+    margin-bottom: 8px;
+  }
+  .tag {
+    display: inline-block;
+    background: var(--accent-dim);
+    color: #04130b;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    text-transform: uppercase;
+  }
+  h1 { font-size: 30px; margin: 14px 0 6px; letter-spacing: -0.5px; }
+  h2 {
+    font-size: 21px;
+    margin: 40px 0 14px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    color: #fff;
+  }
+  h3 { font-size: 16px; margin: 22px 0 8px; color: var(--accent); }
+  .sub { color: var(--muted); font-size: 15px; }
+  p { margin: 10px 0; }
+  code {
+    background: var(--code-bg);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Consolas, Monaco, monospace;
+    font-size: 13.5px;
+    color: #b8e6c8;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; color: #c8e6d4; }
+  .verdict {
+    background: linear-gradient(135deg, #102b1c, #0d2417);
+    border: 1px solid var(--accent-dim);
+    border-radius: 12px;
+    padding: 20px 22px;
+    margin: 22px 0;
+  }
+  .verdict .big { font-size: 20px; font-weight: 700; color: var(--accent); }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin: 14px 0;
+  }
+  .grid { display: grid; gap: 14px; }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 720px) { .grid-3 { grid-template-columns: 1fr; } }
+  .repo-card h3 { margin-top: 0; }
+  .repo-card .effort { font-size: 13px; color: var(--muted); }
+  .pill {
+    display: inline-block; font-size: 11px; font-weight: 700;
+    padding: 2px 8px; border-radius: 20px; margin-left: 6px;
+  }
+  .pill.low { background: #173d28; color: var(--accent); }
+  .pill.med { background: #3d3417; color: var(--warn); }
+  .pill.high { background: #3d1f1f; color: var(--danger); }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; }
+  td code { font-size: 12.5px; }
+  .flow {
+    display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; margin: 18px 0;
+  }
+  .flow-step {
+    flex: 1; min-width: 130px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px; position: relative;
+  }
+  .flow-step .n {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent); color: #04130b; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; margin-bottom: 6px;
+  }
+  .flow-step .t { font-weight: 600; font-size: 14px; }
+  .flow-step .d { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  .flow-step.new { border-color: var(--accent-dim); }
+  .flow-step.reuse { border-style: dashed; }
+  .badge-new { color: var(--accent); font-size: 11px; font-weight: 700; }
+  .badge-reuse { color: var(--blue); font-size: 11px; font-weight: 700; }
+  .note { border-left: 3px solid var(--warn); padding: 8px 14px; background: var(--panel); margin: 14px 0; border-radius: 0 8px 8px 0; }
+  .note.danger { border-color: var(--danger); }
+  .note.ok { border-color: var(--accent); }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+  .file { color: var(--blue); font-family: "SF Mono", Consolas, monospace; font-size: 13px; }
+  .check { color: var(--accent); font-weight: 700; }
+  .x { color: var(--danger); font-weight: 700; }
+  .phase-head { display: flex; align-items: baseline; gap: 12px; }
+  .phase-head .num {
+    font-size: 13px; font-weight: 700; color: #04130b; background: var(--accent);
+    border-radius: 6px; padding: 2px 9px;
+  }
+  hr { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+  .legend { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+  .legend span { margin-right: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <span class="tag">Plan · chưa code</span>
+  <h1>CV Upgrade — Top-K Food Picker</h1>
+  <p class="sub">Đổi luồng Scanner: từ "model đoán 1 món" → "model đưa top-5 món + confidence để người dùng chọn → chọn món cụ thể → chỉnh khối lượng → Add". Phân tích trên cả 3 codebase: <code>AI_server</code>, <code>go_backend</code>, <code>Nutrix</code>.</p>
+</header>
+
+<div class="verdict">
+  <div class="big">✅ Khả thi — đèn xanh, rủi ro thấp</div>
+  <p style="margin-bottom:0">Phần lớn cơ sở hạ tầng <strong>đã tồn tại sẵn</strong>. Model đã tính top-K nhưng đang vứt đi; backend đã có endpoint search trả danh sách món; Flutter đã có màn chỉnh khối lượng + Add. Thay đổi mang tính <strong>additive (cộng thêm)</strong> — không phá luồng hiện tại. Không cần train lại model, không đổi schema DB.</p>
+</div>
+
+<h2>1. Luồng hiện tại vs. luồng mục tiêu</h2>
+
+<h3>Hiện tại (1 phát ra 1 món)</h3>
+<div class="flow">
+  <div class="flow-step"><span class="n">1</span><div class="t">Chụp ảnh</div><div class="d">ScannerScreen → capture</div></div>
+  <div class="flow-step"><span class="n">2</span><div class="t">Upload</div><div class="d">POST /foods/estimate</div></div>
+  <div class="flow-step"><span class="n">3</span><div class="t">Model đoán 1 món</div><div class="d">topk=1 → "phở"</div></div>
+  <div class="flow-step"><span class="n">4</span><div class="t">MealDetailScreen</div><div class="d">1 món + nutrition</div></div>
+  <div class="flow-step"><span class="n">5</span><div class="t">Add</div><div class="d">log-meal</div></div>
+</div>
+
+<h3>Mục tiêu (top-5 → chọn → danh sách → chỉnh → Add)</h3>
+<div class="flow">
+  <div class="flow-step reuse"><span class="n">1</span><div class="t">Chụp ảnh</div><div class="d">ScannerScreen</div><div class="badge-reuse">TÁI DÙNG</div></div>
+  <div class="flow-step new"><span class="n">2</span><div class="t">Top-5 category + %</div><div class="d">"Phở 92%", "Bún bò 5%"…</div><div class="badge-new">MỚI</div></div>
+  <div class="flow-step new"><span class="n">3</span><div class="t">Danh sách món</div><div class="d">"Phở Thìn", "Phở Bát Đàn"…</div><div class="badge-new">MỚI (tái dùng AddMeal)</div></div>
+  <div class="flow-step reuse"><span class="n">4</span><div class="t">Chỉnh khối lượng</div><div class="d">mass + calo pre-fill</div><div class="badge-reuse">TÁI DÙNG</div></div>
+  <div class="flow-step reuse"><span class="n">5</span><div class="t">Add</div><div class="d">log-meal</div><div class="badge-reuse">TÁI DÙNG</div></div>
+</div>
+<p class="legend"><span><span class="badge-new">MỚI</span> = phải xây</span><span><span class="badge-reuse">TÁI DÙNG</span> = đã có sẵn</span></p>
+
+<h2>2. Hiện trạng từng codebase</h2>
+
+<div class="grid grid-3">
+  <div class="card repo-card">
+    <h3>AI_server <span class="pill low">dễ</span></h3>
+    <p class="effort">EfficientNet-B0, 30 lớp món Việt</p>
+    <p><span class="check">✓</span> <code>predict_food_class()</code> <strong>đã tính sẵn</strong> full softmax + top-K sorted (<code>default_topk=5</code>)</p>
+    <p><span class="x">✗</span> Pipeline ép <code>topk=1</code> rồi lấy <code>preds[0]</code> — vứt top-K</p>
+    <p><span class="x">✗</span> Proto chỉ có 1 <code>food_label</code> + 1 <code>confidence</code></p>
+  </div>
+  <div class="card repo-card">
+    <h3>go_backend <span class="pill med">vừa</span></h3>
+    <p class="effort">Go/Gin · gRPC client tới ai-cv</p>
+    <p><span class="check">✓</span> <code>GET /foods/search?q=</code> trả <code>[]Food</code> (Postgres + KG) — dùng cho bước 3</p>
+    <p><span class="check">✓</span> <code>POST /log-meal</code> = bước Add cuối, <strong>khỏi đổi</strong></p>
+    <p><span class="x">✗</span> <code>resolveAIFood</code> gom danh sách thành 1 món (cần "không gom")</p>
+    <p><span class="x">✗</span> Cổng confidence &lt; 0.5 bị reject thẳng</p>
+  </div>
+  <div class="card repo-card">
+    <h3>Nutrix <span class="pill med">vừa</span></h3>
+    <p class="effort">Flutter · BLoC</p>
+    <p><span class="check">✓</span> <code>MealDetailScreen</code> + bottom sheet <strong>đã có</strong> ô chỉnh khối lượng + Add (bước 4-5)</p>
+    <p><span class="check">✓</span> <code>AddMealScreen</code> tab Food (<code>MealItemCard</code> list) — tái dùng cho bước 3</p>
+    <p><span class="x">✗</span> <code>ScannerLoadedState</code> chỉ giữ 1 <code>MealEntity</code></p>
+  </div>
+</div>
+
+<h2>3. Thay đổi API contract (additive — không phá cũ)</h2>
+
+<h3>Proto — thêm field mới, giữ field cũ</h3>
+<p>Field <code>food_label</code> / <code>food_label_confidence</code> cũ (top-1) <strong>giữ nguyên</strong> để client cũ vẫn chạy. Thêm <code>repeated</code>:</p>
+<pre><code>// inference.proto — thêm message mới
+message FoodPrediction {
+  string food_label = 1;   // "pho", "com_tam" (đã normalize)
+  float  confidence  = 2;  // softmax [0..1]
+  float  mass_g      = 3;  // mass theo density của RIÊNG món này
+}
+
+// EstimateVolumeResponse: thêm tag kế tiếp (15)
+repeated FoodPrediction food_predictions = 15;</code></pre>
+
+<div class="note">
+  <strong>Điểm thiết kế quan trọng — mass per-candidate.</strong> Volume (depth) là chung cho cả ảnh, nhưng ở chế độ legacy <code>mass = volume × density[label]</code> — density khác nhau theo món. Nên trả <code>mass_g</code> cho <em>từng</em> candidate (volume dùng chung, chỉ tra density theo từng label — chi phí gần như bằng 0). Khi người dùng chọn "phở" thì lấy đúng mass của phở pre-fill. Nếu chạy chế độ <code>primary</code> (depth regressor) thì mass độc lập category → mọi candidate cùng mass, vẫn đúng.
+</div>
+
+<h3>REST — endpoint mới (giữ /estimate cũ làm fallback)</h3>
+<table>
+  <tr><th>Endpoint</th><th>Trả về</th><th>Dùng cho</th></tr>
+  <tr><td><code>POST /nutrition/foods/scan</code> <span class="badge-new">MỚI</span></td><td><code>{ candidates: [{food_label, confidence, mass_g, display_name}] }</code></td><td>Bước 2 — top-5 picker</td></tr>
+  <tr><td><code>GET /nutrition/foods/by-label?label=pho</code> <span class="badge-new">MỚI</span></td><td><code>[]Food</code> (không gom)</td><td>Bước 3 — danh sách món</td></tr>
+  <tr><td><code>POST /nutrition/log-meal</code> <span class="badge-reuse">CŨ</span></td><td><code>{intake_id}</code></td><td>Bước 5 — Add</td></tr>
+</table>
+<p class="sub"><code>/foods/by-label</code> tái dùng logic <code>resolveAIFood</code> sẵn có (map label → <code>aiCatalogSearchTerms</code> → <code>SearchFoods</code>) nhưng trả <strong>toàn bộ</strong> candidate thay vì <code>selectAIFoodCandidate</code> chọn 1.</p>
+
+<h2>4. Kế hoạch triển khai theo phase</h2>
+
+<div class="card">
+  <div class="phase-head"><span class="num">Phase 0</span><h3 style="margin:0;color:#fff">Proto contract <span class="pill low">dễ · nền tảng</span></h3></div>
+  <ul>
+    <li>Thêm message <code>FoodPrediction</code> + field <code>repeated food_predictions</code> vào <span class="file">AI_server/Computer_Vision/proto/inference.proto</span></li>
+    <li>Đồng bộ y hệt vào <span class="file">go_backend/api/proto/inference.proto</span></li>
+    <li>Regen stubs: <code>build_proto.py</code> (Python) + <code>protoc</code> (Go → <code>inference.pb.go</code>)</li>
+  </ul>
+  <p class="sub">⚠️ Đây là bước duy nhất "chạm 2 repo cùng lúc". Làm trước, commit, rồi mới làm tiếp.</p>
+</div>
+
+<div class="card">
+  <div class="phase-head"><span class="num">Phase 1</span><h3 style="margin:0;color:#fff">AI_server — bóc top-K ra <span class="pill low">dễ</span></h3></div>
+  <ul>
+    <li><span class="file">ml/worker.py</span> (~L451): đổi <code>topk=1</code> → <code>topk=5</code>, <strong>không</strong> bỏ <code>preds[1:]</code>; normalize label từng phần tử (<code>.lower().replace(" ","_")</code>)</li>
+    <li>Tính <code>mass_g</code> per-candidate: volume chung × <code>lookup_density(label_i)</code></li>
+    <li><span class="file">domain/entities.py</span> <code>VolumeEstimate</code>: thêm field <code>food_predictions: list[...]</code></li>
+    <li><span class="file">grpc_server/service.py</span>: populate field repeated mới</li>
+    <li><strong>Cổng confidence</strong> (worker L463): với luồng top-K, trả raw top-5 <em>bất kể</em> ngưỡng — nếu không món đúng nhưng confidence thấp sẽ bị ẩn. Giữ top-1 gate cho backward-compat.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <div class="phase-head"><span class="num">Phase 2</span><h3 style="margin:0;color:#fff">go_backend — phơi candidates + danh sách <span class="pill med">vừa</span></h3></div>
+  <ul>
+    <li><span class="file">internal/domain/inference_port.go</span>: <code>InferenceResult</code> thêm <code>Predictions []FoodPrediction</code></li>
+    <li><span class="file">infrastructure/grpc_ai_client.go</span>: map field repeated mới; <strong>nới</strong> <code>validateEstimateResponse</code> (đừng reject &lt;0.5 cho luồng scan)</li>
+    <li>Handler mới <code>POST /foods/scan</code>: gọi <code>EstimateVolume</code>, map mỗi prediction → <code>display_name</code> (Việt hoá từ 30 label), trả list</li>
+    <li>Handler mới <code>GET /foods/by-label</code>: tách logic từ <code>resolveAIFood</code> nhưng trả full list (bỏ <code>selectAIFoodCandidate</code>)</li>
+    <li>Đăng ký route trong <code>NewNutritionHandler</code></li>
+  </ul>
+  <div class="note ok" style="margin-top:6px"><code>POST /log-meal</code>, struct <code>Food</code>, scaling per-100g — <strong>không đụng</strong>.</div>
+</div>
+
+<div class="card">
+  <div class="phase-head"><span class="num">Phase 3</span><h3 style="margin:0;color:#fff">Nutrix — UI nhiều bước <span class="pill med">vừa · nhiều việc nhất</span></h3></div>
+  <ul>
+    <li><span class="file">scanner/presentation/scanner_state.dart</span>: thêm state <code>ScannerCandidatesState{ List&lt;FoodCandidate&gt; }</code></li>
+    <li><span class="file">scanner_bloc.dart</span> (~L45): handler ảnh gọi <code>/foods/scan</code> → emit candidates thay vì 1 món</li>
+    <li><strong>Bước 2 (mới):</strong> widget picker top-5 (bottom sheet) — list category + thanh % confidence. Cần escape hatch "Tìm thủ công" nếu cả 5 đều sai (món ngoài 30 lớp)</li>
+    <li><strong>Bước 3 (mới, tái dùng):</strong> chọn category → màn danh sách món. Tái dùng pattern <code>AddMealScreen</code> tab Food: <code>FoodBloc</code> + <code>MealItemCard</code> + <code>ListView.builder</code>, gọi <code>/foods/by-label</code></li>
+    <li><strong>Bước 4-5 (tái dùng):</strong> chọn món → <code>MealDetailScreen</code> (đã có ô chỉnh khối lượng + Add). Pre-fill <code>servingQuantity</code> = <code>mass_g</code> của candidate đã chọn</li>
+    <li>Parse thêm <code>confidence</code> + <code>mass_g</code> trong <code>MealEntity.fromNutrixFood</code> (hiện đang bỏ)</li>
+  </ul>
+</div>
+
+<div class="card">
+  <div class="phase-head"><span class="num">Phase 4</span><h3 style="margin:0;color:#fff">Test & verify <span class="pill low">dễ</span></h3></div>
+  <ul>
+    <li>gRPC: chụp ảnh phở → kiểm <code>food_predictions</code> trả 5 phần tử sorted</li>
+    <li>REST: <code>POST /foods/scan</code> + <code>GET /foods/by-label?label=pho</code> bằng curl</li>
+    <li>E2E web: chụp → top-5 → chọn phở → danh sách → chọn → chỉnh g → Add → kiểm diary</li>
+    <li>Backward-compat: <code>/foods/estimate</code> cũ vẫn chạy nguyên</li>
+  </ul>
+</div>
+
+<h2>5. Rủi ro & cách xử lý</h2>
+<table>
+  <tr><th>Rủi ro</th><th>Mức</th><th>Xử lý</th></tr>
+  <tr><td>Món thật nằm ngoài 30 lớp → top-5 đều sai</td><td><span class="x">Cao</span></td><td>Nút "Tìm thủ công" ở bước 2 → mở thẳng search (đã có sẵn AddMealScreen)</td></tr>
+  <tr><td>Cổng confidence ẩn món đúng (confidence thấp)</td><td>Vừa</td><td>Luồng scan trả raw top-5 không qua gate; chỉ top-1 legacy giữ gate</td></tr>
+  <tr><td>mass_g sai khi chọn category ≠ top-1 (legacy density)</td><td>Vừa</td><td>Trả mass per-candidate (Phase 1) — đã giải quyết trong proto</td></tr>
+  <tr><td>Label normalize không khớp key <code>aiCatalogSearchTerms</code></td><td>Thấp</td><td>Dùng đúng hàm normalize hiện có; test 30 label</td></tr>
+  <tr><td>Lệch proto giữa 2 repo</td><td>Thấp</td><td>Phase 0 đồng bộ + commit trước khi làm tiếp</td></tr>
+</table>
+
+<h2>6. Vì sao KHÔNG phá hệ thống hiện tại</h2>
+<ul>
+  <li><span class="check">✓</span> Proto chỉ <strong>thêm</strong> field/message mới (tag mới) — gRPC bỏ qua field lạ, client cũ không vỡ</li>
+  <li><span class="check">✓</span> Endpoint <code>/foods/estimate</code> cũ <strong>giữ nguyên</strong> làm fallback</li>
+  <li><span class="check">✓</span> <code>/log-meal</code>, schema DB, scaling per-100g — không đụng</li>
+  <li><span class="check">✓</span> Cổng confidence top-1 legacy giữ nguyên; chỉ luồng scan mới nới</li>
+  <li><span class="check">✓</span> Không train lại model — softmax/top-K đã có sẵn trong checkpoint</li>
+</ul>
+
+<h2>7. Ước lượng & thứ tự đề xuất</h2>
+<table>
+  <tr><th>Phase</th><th>Repo</th><th>Độ khó</th><th>Ghi chú</th></tr>
+  <tr><td>0 — Proto</td><td>AI_server + go_backend</td><td><span class="pill low">dễ</span></td><td>Làm & commit trước tiên</td></tr>
+  <tr><td>1 — Top-K</td><td>AI_server</td><td><span class="pill low">dễ</span></td><td>Đổi vài dòng, propagate list</td></tr>
+  <tr><td>2 — Endpoints</td><td>go_backend</td><td><span class="pill med">vừa</span></td><td>2 handler mới, tái dùng search</td></tr>
+  <tr><td>3 — UI</td><td>Nutrix</td><td><span class="pill med">vừa</span></td><td>Nhiều việc nhất; tái dùng AddMeal + MealDetail</td></tr>
+  <tr><td>4 — Test</td><td>cả 3</td><td><span class="pill low">dễ</span></td><td>E2E + backward-compat</td></tr>
+</table>
+
+<div class="note ok">
+  <strong>Khuyến nghị:</strong> làm tuần tự 0 → 1 → 2 → 3 → 4. Mỗi phase tự verify được độc lập (gRPC test → curl → UI), nên có thể dừng/ship từng mảng. Sau khi duyệt plan này, tôi đề xuất bắt đầu từ <strong>Phase 0 + 1</strong> (proto + AI_server) vì nó nhỏ và mở khoá mọi thứ phía sau.
+</div>
+
+</div>
+</body>
+</html>

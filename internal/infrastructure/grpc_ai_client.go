@@ -70,6 +70,43 @@ func (g *grpcAIClient) EstimateVolume(ctx context.Context, imageBytes []byte) (*
 		return nil, err
 	}
 
+	return mapEstimateResponse(res), nil
+}
+
+// ScanFoodCandidates calls the same EstimateVolume RPC but skips the strict top-1
+// confidence gate, returning the raw top-K candidates for the user-facing picker.
+func (g *grpcAIClient) ScanFoodCandidates(ctx context.Context, imageBytes []byte) (*domain.InferenceResult, error) {
+	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	res, err := g.client.EstimateVolume(reqCtx, &pb.EstimateVolumeRequest{ImageData: imageBytes})
+	if err != nil {
+		log.Printf("[gRPC] ScanFoodCandidates failed after %v: %v", time.Since(start), err)
+		return nil, fmt.Errorf("ai inference failed: %w", err)
+	}
+
+	log.Printf("[gRPC] Scan Success | ReqID: %s | Latency: %.2fms | Top: %s (%.2f) | Candidates: %d",
+		res.RequestId, res.LatencyMs, res.FoodLabel, res.FoodLabelConfidence, len(res.FoodPredictions))
+
+	// Lenient gate: we only need at least one candidate to show a picker.
+	if len(res.FoodPredictions) == 0 && (res.FoodLabel == "" || res.FoodLabel == "unknown") {
+		return nil, fmt.Errorf("ai could not recognize any food in image")
+	}
+	return mapEstimateResponse(res), nil
+}
+
+// mapEstimateResponse converts the gRPC response into the domain result,
+// including the top-K candidate list.
+func mapEstimateResponse(res *pb.EstimateVolumeResponse) *domain.InferenceResult {
+	predictions := make([]domain.FoodPrediction, 0, len(res.FoodPredictions))
+	for _, p := range res.FoodPredictions {
+		predictions = append(predictions, domain.FoodPrediction{
+			FoodLabel:  p.FoodLabel,
+			Confidence: float64(p.Confidence),
+			MassG:      float64(p.MassG),
+		})
+	}
 	return &domain.InferenceResult{
 		FoodLabel:           res.FoodLabel,
 		FoodLabelConfidence: float64(res.FoodLabelConfidence),
@@ -77,7 +114,8 @@ func (g *grpcAIClient) EstimateVolume(ctx context.Context, imageBytes []byte) (*
 		Density:             float64(res.DensityGCm3),
 		MassG:               float64(res.MassG),
 		Confidence:          float64(res.FoodLabelConfidence),
-	}, nil
+		Predictions:         predictions,
+	}
 }
 
 func validateEstimateResponse(res *pb.EstimateVolumeResponse) error {

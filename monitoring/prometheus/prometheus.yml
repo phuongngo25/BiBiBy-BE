@@ -25,3 +25,19 @@ scrape_configs:
         labels:
           app: nutrix-cloudflared
           env: local
+
+  - job_name: node-exporter
+    static_configs:
+      - targets:
+          - node-exporter:9100
+        labels:
+          app: nutrix-node-exporter
+          env: local
+
+  - job_name: postgres-exporter
+    static_configs:
+      - targets:
+          - postgres-exporter:9187
+        labels:
+          app: nutrix-postgres-exporter
+          env: local

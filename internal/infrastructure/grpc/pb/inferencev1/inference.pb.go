@@ -680,6 +680,73 @@ func (x *EstimateVolumeRequest) GetImageData() []byte {
 	return nil
 }
 
+// One candidate dish from the classifier's top-K softmax distribution.
+// Used to let the user pick from several likely dishes instead of forcing top-1.
+type FoodPrediction struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Normalized classification label (e.g., "pho", "com_tam").
+	FoodLabel string `protobuf:"bytes,1,opt,name=food_label,json=foodLabel,proto3" json:"food_label,omitempty"`
+	// Softmax probability for this candidate [0.0, 1.0].
+	Confidence float32 `protobuf:"fixed32,2,opt,name=confidence,proto3" json:"confidence,omitempty"`
+	// Estimated mass in grams for THIS candidate (shared volume × per-class density).
+	// Mass differs per candidate in legacy density mode; identical across candidates
+	// in direct-mass mode. 0 when density for the label is unknown.
+	MassG         float32 `protobuf:"fixed32,3,opt,name=mass_g,json=massG,proto3" json:"mass_g,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FoodPrediction) Reset() {
+	*x = FoodPrediction{}
+	mi := &file_inference_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FoodPrediction) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FoodPrediction) ProtoMessage() {}
+
+func (x *FoodPrediction) ProtoReflect() protoreflect.Message {
+	mi := &file_inference_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FoodPrediction.ProtoReflect.Descriptor instead.
+func (*FoodPrediction) Descriptor() ([]byte, []int) {
+	return file_inference_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *FoodPrediction) GetFoodLabel() string {
+	if x != nil {
+		return x.FoodLabel
+	}
+	return ""
+}
+
+func (x *FoodPrediction) GetConfidence() float32 {
+	if x != nil {
+		return x.Confidence
+	}
+	return 0
+}
+
+func (x *FoodPrediction) GetMassG() float32 {
+	if x != nil {
+		return x.MassG
+	}
+	return 0
+}
+
 type EstimateVolumeResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Server-generated request ID for end-to-end tracing.
@@ -707,13 +774,16 @@ type EstimateVolumeResponse struct {
 	ClassifierVersion string `protobuf:"bytes,12,opt,name=classifier_version,json=classifierVersion,proto3" json:"classifier_version,omitempty"`
 	VolumeVersion     string `protobuf:"bytes,13,opt,name=volume_version,json=volumeVersion,proto3" json:"volume_version,omitempty"`
 	DensityVersion    string `protobuf:"bytes,14,opt,name=density_version,json=densityVersion,proto3" json:"density_version,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Top-K classifier candidates (sorted descending by confidence).
+	// food_label/food_label_confidence above remain the top-1 for backward compat.
+	FoodPredictions []*FoodPrediction `protobuf:"bytes,15,rep,name=food_predictions,json=foodPredictions,proto3" json:"food_predictions,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *EstimateVolumeResponse) Reset() {
 	*x = EstimateVolumeResponse{}
-	mi := &file_inference_proto_msgTypes[10]
+	mi := &file_inference_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -725,7 +795,7 @@ func (x *EstimateVolumeResponse) String() string {
 func (*EstimateVolumeResponse) ProtoMessage() {}
 
 func (x *EstimateVolumeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_inference_proto_msgTypes[10]
+	mi := &file_inference_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -738,7 +808,7 @@ func (x *EstimateVolumeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EstimateVolumeResponse.ProtoReflect.Descriptor instead.
 func (*EstimateVolumeResponse) Descriptor() ([]byte, []int) {
-	return file_inference_proto_rawDescGZIP(), []int{10}
+	return file_inference_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *EstimateVolumeResponse) GetRequestId() string {
@@ -839,6 +909,13 @@ func (x *EstimateVolumeResponse) GetDensityVersion() string {
 	return ""
 }
 
+func (x *EstimateVolumeResponse) GetFoodPredictions() []*FoodPrediction {
+	if x != nil {
+		return x.FoodPredictions
+	}
+	return nil
+}
+
 var File_inference_proto protoreflect.FileDescriptor
 
 const file_inference_proto_rawDesc = "" +
@@ -894,7 +971,14 @@ const file_inference_proto_rawDesc = "" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\"6\n" +
 	"\x15EstimateVolumeRequest\x12\x1d\n" +
 	"\n" +
-	"image_data\x18\x01 \x01(\fR\timageData\"\x92\x04\n" +
+	"image_data\x18\x01 \x01(\fR\timageData\"f\n" +
+	"\x0eFoodPrediction\x12\x1d\n" +
+	"\n" +
+	"food_label\x18\x01 \x01(\tR\tfoodLabel\x12\x1e\n" +
+	"\n" +
+	"confidence\x18\x02 \x01(\x02R\n" +
+	"confidence\x12\x15\n" +
+	"\x06mass_g\x18\x03 \x01(\x02R\x05massG\"\xdf\x04\n" +
 	"\x16EstimateVolumeResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1d\n" +
@@ -915,7 +999,8 @@ const file_inference_proto_rawDesc = "" +
 	"\x0edensity_source\x18\v \x01(\tR\rdensitySource\x12-\n" +
 	"\x12classifier_version\x18\f \x01(\tR\x11classifierVersion\x12%\n" +
 	"\x0evolume_version\x18\r \x01(\tR\rvolumeVersion\x12'\n" +
-	"\x0fdensity_version\x18\x0e \x01(\tR\x0edensityVersion*Q\n" +
+	"\x0fdensity_version\x18\x0e \x01(\tR\x0edensityVersion\x12K\n" +
+	"\x10food_predictions\x18\x0f \x03(\v2 .nutrix.inference.FoodPredictionR\x0ffoodPredictions*Q\n" +
 	"\tRiskLevel\x12\x10\n" +
 	"\fRISK_UNKNOWN\x10\x00\x12\r\n" +
 	"\tRISK_SAFE\x10\x01\x12\x10\n" +
@@ -940,7 +1025,7 @@ func file_inference_proto_rawDescGZIP() []byte {
 }
 
 var file_inference_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_inference_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_inference_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_inference_proto_goTypes = []any{
 	(RiskLevel)(0),                      // 0: nutrix.inference.RiskLevel
 	(*CreateUploadSessionRequest)(nil),  // 1: nutrix.inference.CreateUploadSessionRequest
@@ -953,26 +1038,28 @@ var file_inference_proto_goTypes = []any{
 	(*Violation)(nil),                   // 8: nutrix.inference.Violation
 	(*Recommendation)(nil),              // 9: nutrix.inference.Recommendation
 	(*EstimateVolumeRequest)(nil),       // 10: nutrix.inference.EstimateVolumeRequest
-	(*EstimateVolumeResponse)(nil),      // 11: nutrix.inference.EstimateVolumeResponse
+	(*FoodPrediction)(nil),              // 11: nutrix.inference.FoodPrediction
+	(*EstimateVolumeResponse)(nil),      // 12: nutrix.inference.EstimateVolumeResponse
 }
 var file_inference_proto_depIdxs = []int32{
 	0,  // 0: nutrix.inference.AnalyzeMealImageResponse.risk_level:type_name -> nutrix.inference.RiskLevel
 	8,  // 1: nutrix.inference.AnalyzeMealImageResponse.violations:type_name -> nutrix.inference.Violation
 	9,  // 2: nutrix.inference.AnalyzeMealImageResponse.recommendations:type_name -> nutrix.inference.Recommendation
 	7,  // 3: nutrix.inference.AnalyzeMealImageResponse.evidence_paths:type_name -> nutrix.inference.EvidencePath
-	10, // 4: nutrix.inference.InferenceService.EstimateVolume:input_type -> nutrix.inference.EstimateVolumeRequest
-	1,  // 5: nutrix.inference.InferenceService.CreateUploadSession:input_type -> nutrix.inference.CreateUploadSessionRequest
-	3,  // 6: nutrix.inference.InferenceService.ConfirmUpload:input_type -> nutrix.inference.ConfirmUploadRequest
-	5,  // 7: nutrix.inference.InferenceService.AnalyzeMealImage:input_type -> nutrix.inference.AnalyzeMealImageRequest
-	11, // 8: nutrix.inference.InferenceService.EstimateVolume:output_type -> nutrix.inference.EstimateVolumeResponse
-	2,  // 9: nutrix.inference.InferenceService.CreateUploadSession:output_type -> nutrix.inference.CreateUploadSessionResponse
-	4,  // 10: nutrix.inference.InferenceService.ConfirmUpload:output_type -> nutrix.inference.ConfirmUploadResponse
-	6,  // 11: nutrix.inference.InferenceService.AnalyzeMealImage:output_type -> nutrix.inference.AnalyzeMealImageResponse
-	8,  // [8:12] is the sub-list for method output_type
-	4,  // [4:8] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	11, // 4: nutrix.inference.EstimateVolumeResponse.food_predictions:type_name -> nutrix.inference.FoodPrediction
+	10, // 5: nutrix.inference.InferenceService.EstimateVolume:input_type -> nutrix.inference.EstimateVolumeRequest
+	1,  // 6: nutrix.inference.InferenceService.CreateUploadSession:input_type -> nutrix.inference.CreateUploadSessionRequest
+	3,  // 7: nutrix.inference.InferenceService.ConfirmUpload:input_type -> nutrix.inference.ConfirmUploadRequest
+	5,  // 8: nutrix.inference.InferenceService.AnalyzeMealImage:input_type -> nutrix.inference.AnalyzeMealImageRequest
+	12, // 9: nutrix.inference.InferenceService.EstimateVolume:output_type -> nutrix.inference.EstimateVolumeResponse
+	2,  // 10: nutrix.inference.InferenceService.CreateUploadSession:output_type -> nutrix.inference.CreateUploadSessionResponse
+	4,  // 11: nutrix.inference.InferenceService.ConfirmUpload:output_type -> nutrix.inference.ConfirmUploadResponse
+	6,  // 12: nutrix.inference.InferenceService.AnalyzeMealImage:output_type -> nutrix.inference.AnalyzeMealImageResponse
+	9,  // [9:13] is the sub-list for method output_type
+	5,  // [5:9] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_inference_proto_init() }
@@ -986,7 +1073,7 @@ func file_inference_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_inference_proto_rawDesc), len(file_inference_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   11,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
