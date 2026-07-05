@@ -2,6 +2,7 @@ package usecase_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -184,6 +185,67 @@ func TestGetDailyPlan_BurnedCalories(t *testing.T) {
 	}
 	if plan.BurnedCalories != 450.5 {
 		t.Errorf("expected 450.5 burned calories, got %f", plan.BurnedCalories)
+	}
+}
+
+func TestLogMeal_BlocksFoodConflictingWithAllergy(t *testing.T) {
+	ctx := context.Background()
+	userID := uuid.New()
+	foodID := uuid.New()
+
+	nutriRepo := &mockNutritionRepo{
+		foodsByID: map[uuid.UUID]domain.Food{
+			foodID: {ID: foodID, Name: "Grilled shrimp", Source: "VFA_DISH", CaloriesPer100g: 120},
+		},
+	}
+	userRepo := &mockUserRepo{user: &domain.User{Allergies: "shellfish"}}
+	uc := usecase.NewNutritionUseCase(nutriRepo, nil, nil, nil, &mockWorkoutRepo{}, userRepo, nil, nil, nil)
+
+	req := &domain.LogMealRequest{
+		FoodID:        foodID,
+		QuantityGrams: 100,
+		MealType:      "lunch",
+		ConsumedDate:  time.Now().Format("2006-01-02"),
+	}
+
+	// Without acknowledgement -> blocked.
+	_, err := uc.LogMeal(ctx, userID, req)
+	var blocked *domain.MealBlockedError
+	if !errors.As(err, &blocked) {
+		t.Fatalf("expected MealBlockedError, got %v", err)
+	}
+	if len(blocked.Violations) == 0 {
+		t.Fatalf("expected violations to be reported")
+	}
+
+	// With explicit acknowledgement -> allowed.
+	req.AcknowledgedRisk = true
+	if _, err := uc.LogMeal(ctx, userID, req); err != nil {
+		t.Fatalf("expected acknowledged log to succeed, got %v", err)
+	}
+}
+
+func TestLogMeal_AllowsSafeFood(t *testing.T) {
+	ctx := context.Background()
+	userID := uuid.New()
+	foodID := uuid.New()
+
+	nutriRepo := &mockNutritionRepo{
+		foodsByID: map[uuid.UUID]domain.Food{
+			foodID: {ID: foodID, Name: "Steamed rice", Source: "VFA", CaloriesPer100g: 130},
+		},
+	}
+	userRepo := &mockUserRepo{user: &domain.User{Allergies: "shellfish"}}
+	uc := usecase.NewNutritionUseCase(nutriRepo, nil, nil, nil, &mockWorkoutRepo{}, userRepo, nil, nil, nil)
+
+	req := &domain.LogMealRequest{
+		FoodID:        foodID,
+		QuantityGrams: 150,
+		MealType:      "lunch",
+		ConsumedDate:  time.Now().Format("2006-01-02"),
+	}
+	if _, err := uc.LogMeal(ctx, userID, req); err != nil {
+		t.Fatalf("expected safe food to log, got %v", err)
 	}
 }
 

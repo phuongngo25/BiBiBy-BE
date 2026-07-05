@@ -17,4 +17,18 @@ var (
 	ErrLogNotFound         = errors.New("food log entry not found")
 	ErrInvalidQuantity     = errors.New("invalid quantity: must be between 1 and 5000 grams")
 	ErrAllCandidatesRejected = errors.New("all candidate meals were rejected due to safety violations")
+	ErrMealBlockedByProfile  = errors.New("this food conflicts with your health profile")
 )
+
+// MealBlockedError is returned by LogMeal when a food conflicts with the user's
+// health profile (allergy/disease/diet) and the request has not explicitly
+// acknowledged the risk. It carries the offending violations so the API layer
+// can surface them to the client for a confirm-to-override prompt.
+type MealBlockedError struct {
+	Violations []MealViolation
+}
+
+func (e *MealBlockedError) Error() string { return ErrMealBlockedByProfile.Error() }
+
+// Unwrap lets errors.Is(err, ErrMealBlockedByProfile) match.
+func (e *MealBlockedError) Unwrap() error { return ErrMealBlockedByProfile }

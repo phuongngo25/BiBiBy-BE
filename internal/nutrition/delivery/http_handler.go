@@ -197,6 +197,15 @@ func (h *NutritionHandler) LogMeal(c *gin.Context) {
 
 	mealLog, err := h.uc.LogMeal(c.Request.Context(), userID, &req)
 	if err != nil {
+		var blocked *domain.MealBlockedError
+		if errors.As(err, &blocked) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"error":      "meal_blocked",
+				"message":    blocked.Error(),
+				"violations": blocked.Violations,
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

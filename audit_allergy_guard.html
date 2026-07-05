@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NutriX — Audit: Vì sao món dị ứng (tôm/shellfish) vẫn add được</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d212b; --ink:#e6e9ef; --muted:#9aa3b2;
+    --line:#2a2f3a; --accent:#5b9dff; --good:#34d399; --bad:#f87171; --warn:#fbbf24;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
+  .wrap{max-width:1000px;margin:0 auto;padding:32px 20px 80px;}
+  h1{font-size:26px;margin:0 0 4px;letter-spacing:-.2px}
+  h2{font-size:20px;margin:38px 0 12px;padding-top:14px;border-top:1px solid var(--line)}
+  h3{font-size:16px;margin:22px 0 8px;color:#cdd4e0}
+  .sub{color:var(--muted);margin:0 0 8px}
+  .tag{display:inline-block;font-size:12px;padding:2px 9px;border-radius:99px;border:1px solid var(--line);color:var(--muted);margin-right:6px}
+  .verdict{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;padding:16px 18px;margin:18px 0}
+  .verdict.bad{border-left-color:var(--bad)}
+  .verdict.good{border-left-color:var(--good)}
+  .verdict.warn{border-left-color:var(--warn)}
+  code{font-family:var(--mono);background:#11141b;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:13px}
+  pre{background:#0b0d12;border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow:auto;font-family:var(--mono);font-size:12.5px;color:#cdd4e0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);color:#cdd4e0;font-weight:600}
+  td.mono,th.mono{font-family:var(--mono)}
+  .hl{color:var(--bad);font-weight:600}
+  .ok{color:var(--good);font-weight:600}
+  .warnt{color:var(--warn);font-weight:600}
+  .muted{color:var(--muted)}
+  ol li,ul li{margin:5px 0}
+  .flow{font-family:var(--mono);font-size:12.5px;color:#cdd4e0;white-space:pre-wrap;background:#0b0d12;border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .foot{color:var(--muted);font-size:12.5px;margin-top:40px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>NutriX — Audit: món gây dị ứng vẫn được thêm vào nhật ký</h1>
+  <p class="sub">Người dùng dị ứng <strong>seafood / shellfish / fish</strong> (và có <strong>gout</strong>) nhưng vẫn add được "Grilled shrimp".</p>
+  <p><span class="tag">Ngày: 2026-07-05</span><span class="tag">go_backend + Nutrix (Flutter)</span></p>
+
+  <div class="verdict bad">
+    <strong>Kết luận:</strong> Cơ chế chặn <em>không hỏng ở tầng phát hiện</em> — backend vẫn nhận ra "Grilled shrimp" vi phạm dị ứng shellfish (mức <span class="hl">CRITICAL</span>) và client vẫn ném đúng <code>MealValidationException</code>.
+    Vấn đề là <span class="hl">không tầng nào THỰC THI kết quả đó</span>: màn hình hiển thị vi phạm bị mồ côi, luồng thêm món nuốt cảnh báo, và API ghi log ở backend không có cổng chặn. Món bị chặn "trên giấy" nhưng vẫn được ghi.
+  </div>
+
+  <h2>1. Phần vẫn hoạt động đúng — Phát hiện (Detection)</h2>
+  <table>
+    <thead><tr><th>Thành phần</th><th>Vị trí</th><th>Hành vi</th></tr></thead>
+    <tbody>
+      <tr><td>Map dị ứng → nguyên liệu</td><td class="mono">nutrition_usecase.go:1442</td><td><code>allergenDetectionTerms("shellfish")</code> → gồm <code>"shrimp", "prawn", "crab"...</code> <span class="ok">✓ có shrimp</span></td></tr>
+      <tr><td>Sinh vi phạm dị ứng</td><td class="mono">nutrition_usecase.go:1946</td><td>Tên "Grilled shrimp" khớp → violation <code>allergy_shellfish</code>, severity <span class="hl">CRITICAL</span></td></tr>
+      <tr><td>Tổng hợp kết quả</td><td class="mono">analyzeMealFromCatalog :1820</td><td>Có violation ⇒ <code>status=REJECTED, safe=false, risk=CRITICAL</code></td></tr>
+      <tr><td>KG override</td><td class="mono">AnalyzeMeal :1759-1768</td><td>Vi phạm local (allergy) được ưu tiên trả về kể cả khi KG nói khác</td></tr>
+      <tr><td>Client parse verdict</td><td class="mono">validate_meal_usecase.dart:33</td><td>Ném <code>MealValidationException</code> khi <code>!safe || REJECTED || CRITICAL || HIGH</code> <span class="ok">✓ đúng</span></td></tr>
+    </tbody>
+  </table>
+  <p class="muted">→ Toàn bộ "trí tuệ" để chặn tôm đều có và chạy đúng. Cái thiếu là <strong>thực thi</strong>.</p>
+
+  <h2>2. Ba tầng phòng thủ đều hở (Root cause)</h2>
+
+  <h3>Tầng 1 — Backend <code>LogMeal</code> không có cổng an toàn</h3>
+  <pre># nutrition_usecase.go ~L247 — LogMeal
+func (u *nutritionUseCase) LogMeal(ctx, userID, req) (*MealLog, error) {
+    food, err := u.repo.GetFoodByID(ctx, req.FoodID)   // chỉ fetch
+    ...
+    u.repo.LogMeal(ctx, mealLog)                        // ghi thẳng, KHÔNG gọi AnalyzeMeal
+}</pre>
+  <p>Endpoint <code>POST /nutrition/log-meal</code> ghi bất kỳ <code>food_id</code> nào client gửi, không kiểm tra hồ sơ dị ứng/bệnh. <span class="hl">Đây là lỗ hổng sâu nhất</span>: dù client có bỏ qua hay bị sửa, server vẫn ghi. Việc chặn hiện phụ thuộc 100% vào client.</p>
+
+  <h3>Tầng 2 — Màn hình hiển thị vi phạm bị mồ côi (dead code)</h3>
+  <p>Có sẵn <code>ScannerReviewScreen</code> render <code>ViolationSection(violations: result.violations)</code>, nhưng:</p>
+  <pre>grep "ScannerReviewScreen" lib/ → chỉ xuất hiện trong scanner_review_screen.dart (định nghĩa)
+grep "ViolationSection"    lib/ → chỉ được dùng bên trong chính file đó</pre>
+  <p><span class="hl">Không nơi nào điều hướng tới <code>ScannerReviewScreen</code></span>. Luồng quét mới (tính năng top-K picker) đi:</p>
+  <div class="flow">Scanner → FoodCandidatePickerScreen → LabelFoodListScreen → MealDetail (bottom sheet) → Save
+                                     ⨯ KHÔNG qua ScannerReviewScreen (nơi đáng ra chặn/hiện vi phạm)</div>
+  <p class="muted">Đây khớp với cảm giác "bữa trước chạy mượt": luồng scan cũ có bước review chặn dị ứng; luồng picker mới thay thế và <em>bỏ qua</em> bước đó.</p>
+
+  <h3>Tầng 3 — Luồng thêm món nuốt cảnh báo</h3>
+  <p><code>MealDetailBloc</code> có gọi <code>validateMeal</code> (2 chỗ), nhưng cả hai đều bắt exception rồi vẫn tiếp tục log — chỉ dùng response để lấy khẩu phần:</p>
+  <pre># meal_detail_bloc.dart
+// InitializeMealEvent (~L133)
+} on MealValidationException catch (e) {
+    final refWeight = _estimatedServingGrams(e.response);  // chỉ lấy serving
+    ... // KHÔNG chặn, KHÔNG cảnh báo
+}
+// addIntake (~L227)
+} on MealValidationException catch (e) {
+    final estimatedServing = _estimatedServingGrams(e.response);
+    ... // vẫn chạy tiếp xuống logMeal
+}</pre>
+  <p>Nút Save (<code>meal_detail_bottom_sheet.dart:166 onAddButtonPressed</code>) chỉ chặn <code>qty &gt; 5000</code>. Vi phạm dị ứng không bao giờ hiện ra cho người dùng ở luồng này. Đường sửa khối lượng trên card đã log (<code>intake_vertical_list.dart:230</code> — đúng màn trong ảnh chụp) gọi thẳng <code>addIntake</code>, cũng không kiểm tra lại.</p>
+
+  <h2>3. Lưu ý thiết kế: dị ứng vs bệnh</h2>
+  <div class="verdict warn">
+    Theo comment tại <code>nutrition_usecase.go:1960</code>: <strong>dị ứng</strong> phát sinh violation <span class="hl">CRITICAL</span> (đáng ra hard-block), còn <strong>bệnh lý</strong> (vd <span class="warnt">gout</span>) chỉ phát sinh <span class="warnt">WARNING</span> (mềm, cố ý — không tự động REJECTED). Nên kể cả sau khi bật enforcement: tôm sẽ bị chặn vì dị ứng, nhưng gout chỉ nên cảnh báo "review khẩu phần", không chặn. Cần thống nhất kỳ vọng sản phẩm cho nhóm bệnh.
+  </div>
+
+  <h2>4. Khuyến nghị khắc phục (theo thứ tự ưu tiên)</h2>
+  <ol>
+    <li><strong>Chốt chặn ở backend <code>LogMeal</code> (bắt buộc, phòng thủ chiều sâu):</strong> trước khi ghi, chạy phân tích hồ sơ (tái dùng <code>ingredientProfileViolations</code>/<code>analyzeMealFromCatalog</code>). Nếu có violation <em>CRITICAL do dị ứng</em> → trả lỗi (vd 409/422 + danh sách vi phạm) trừ khi client gửi cờ <code>acknowledgedRisk=true</code>. Không để việc chặn phụ thuộc hoàn toàn client.</li>
+    <li><strong>Nối lại bước review ở client:</strong> khi <code>validateMeal</code> trả CRITICAL, chặn Save và hiện <code>ScannerReviewScreen</code>/<code>ViolationSection</code> (hoặc một dialog xác nhận). Không nuốt <code>MealValidationException</code> trong <code>MealDetailBloc</code> — phân tách rõ "lấy serving-size" và "verdict an toàn".</li>
+    <li><strong>Phân biệt CRITICAL (block) vs WARNING (confirm):</strong> dị ứng → chặn cứng, cần xác nhận rõ ràng mới cho qua; bệnh (gout...) → cảnh báo mềm cho phép tiếp tục.</li>
+    <li><strong>Guard test:</strong> thêm e2e "user dị ứng shellfish + add Grilled shrimp ⇒ bị chặn/HTTP 4xx" để chống tái phát khi luồng UI đổi lần nữa.</li>
+  </ol>
+
+  <div class="foot">
+    File: <code>go_backend/audit_allergy_guard.html</code> · Điều tra 2026-07-05.<br>
+    Tóm tắt: detection còn nguyên; enforcement đứt ở cả 3 tầng (backend write không gate · màn review mồ côi · meal-detail nuốt cảnh báo). Món dị ứng do đó vẫn ghi được.
+  </div>
+
+</div>
+</body>
+</html>

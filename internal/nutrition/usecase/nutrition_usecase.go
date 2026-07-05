@@ -225,18 +225,19 @@ func (u *nutritionUseCase) SearchByIngredients(ctx context.Context, ingredients 
 
 func (u *nutritionUseCase) CreateFood(ctx context.Context, req *domain.CreateFoodRequest) (*domain.Food, error) {
 	food := &domain.Food{
-		Name:            req.Name,
-		Category:        req.Category,
-		CaloriesPer100g: req.CaloriesPer100g,
-		ProteinPer100g:  req.ProteinPer100g,
-		CarbsPer100g:    req.CarbsPer100g,
-		FatPer100g:      req.FatPer100g,
-		ServingSize:     req.ServingSize,
-		Micronutrients:  req.Micronutrients,
-		IsVegan:         req.IsVegan,
-		ImageURL:        req.ImageURL,
-		Source:          "custom",
-		IsVerified:      true,
+		Name:                req.Name,
+		Category:            req.Category,
+		CaloriesPer100g:     req.CaloriesPer100g,
+		ProteinPer100g:      req.ProteinPer100g,
+		CarbsPer100g:        req.CarbsPer100g,
+		FatPer100g:          req.FatPer100g,
+		ServingSize:         req.ServingSize,
+		Micronutrients:      req.Micronutrients,
+		IsVegan:             req.IsVegan,
+		ImageURL:            req.ImageURL,
+		Source:              "custom",
+		IsVerified:          true,
+		IsPortionNormalized: true, // user-entered value is already genuinely per-100g
 	}
 	if err := u.repo.CreateFood(ctx, food); err != nil {
 		return nil, domain.ErrInternalServerError
@@ -249,6 +250,17 @@ func (u *nutritionUseCase) LogMeal(ctx context.Context, userID uuid.UUID, req *d
 	if err != nil {
 		return nil, err
 	}
+
+	// Safety gate (defense-in-depth): a food that conflicts with the user's
+	// health profile (allergy/disease/diet) is rejected unless the client has
+	// explicitly acknowledged the risk. The client also gates this before its
+	// local write, but the server must never persist an unacknowledged conflict.
+	if !req.AcknowledgedRisk {
+		if violations := u.profileViolationsForFood(ctx, userID, food); len(violations) > 0 {
+			return nil, &domain.MealBlockedError{Violations: violations}
+		}
+	}
+
 	date, err := time.Parse("2006-01-02", req.ConsumedDate)
 	if err != nil {
 		date = time.Now()
@@ -275,6 +287,37 @@ func (u *nutritionUseCase) LogMeal(ctx context.Context, userID uuid.UUID, req *d
 	mealLog.Food = *food
 	u.evaluateStreakHook(ctx, userID, date)
 	return mealLog, nil
+}
+
+// profileViolationsForFood computes the health-profile conflicts for a single
+// food (allergy/diet CRITICAL, disease WARNING, portfolio-excluded ingredient),
+// reusing the same rules as the meal-analysis path. Returns nil when the user
+// profile is unavailable so a lookup failure never blocks logging.
+func (u *nutritionUseCase) profileViolationsForFood(ctx context.Context, userID uuid.UUID, food *domain.Food) []domain.MealViolation {
+	if food == nil {
+		return nil
+	}
+	userProfile, err := u.userRepo.GetByID(ctx, userID)
+	if err != nil || userProfile == nil {
+		return nil
+	}
+
+	foodID := food.ID.String()
+	enrichment := enrichCatalogFood(*food)
+	violations := ingredientProfileViolations(foodID, *food, enrichment, userProfile)
+
+	if userPortfolio := u.loadPlannerPortfolio(ctx, userID); userPortfolio != nil {
+		if plannerFoodExcludedByPortfolio(*food, userPortfolio) {
+			violations = append(violations, domain.MealViolation{
+				ViolationType:    "portfolio_excluded_ingredient",
+				Description:      fmt.Sprintf("%s contains an ingredient excluded in your portfolio", nonEmptyPlanner(food.Name, food.NameEn, foodID)),
+				Severity:         "CRITICAL",
+				OffendingFoodIDs: []string{foodID},
+			})
+		}
+	}
+
+	return violations
 }
 
 func (u *nutritionUseCase) GetDailyPlan(ctx context.Context, userID uuid.UUID, dateStr string) (*domain.DailyPlanResponse, error) {
@@ -1724,6 +1767,29 @@ func (u *nutritionUseCase) AnalyzeMeal(ctx context.Context, userID uuid.UUID, re
 		return nil, fmt.Errorf("KG service unavailable")
 	}
 
+	// AI_server has no Postgres `foods` catalog of its own — resolve names
+	// here so it can prompt the LLM enrichment call with something readable
+	// instead of a bare UUID. Best-effort: a lookup failure just means that
+	// food's enrichment prompt falls back to its ID, not a hard failure.
+	if len(req.Candidate.FoodRefs) == 0 {
+		req.Candidate.FoodRefs = make([]domain.FoodRef, 0, len(req.Candidate.FoodIDs))
+		for _, foodID := range req.Candidate.FoodIDs {
+			parsedID, err := uuid.Parse(foodID)
+			if err != nil {
+				continue
+			}
+			food, err := u.repo.GetFoodByID(ctx, parsedID)
+			if err != nil || food == nil {
+				continue
+			}
+			req.Candidate.FoodRefs = append(req.Candidate.FoodRefs, domain.FoodRef{
+				FoodID: foodID,
+				Name:   food.Name,
+				NameVi: food.NameVi,
+			})
+		}
+	}
+
 	resp, err := u.kgPort.AnalyzeMeal(ctx, req)
 	if err != nil {
 		if localResp := u.analyzeMealFromCatalog(ctx, userID, req); localResp != nil {
@@ -2186,6 +2252,13 @@ func mapComplexResultsToFoods(recipes []spoonacular.RecipeResult) []domain.Food 
 			CarbsPer100g: r.Nutrition.GetNutrient("Carbohydrates"), FatPer100g: r.Nutrition.GetNutrient("Fat"),
 			IsVegan: r.Vegan, IsVegetarian: r.Vegetarian, IsGlutenFree: r.GlutenFree, IsDairyFree: r.DairyFree,
 			ImageURL: r.Image, ServingSize: fmt.Sprintf("%.0f servings", r.Servings), Source: "Spoonacular",
+			// CONFIRMED (Spoonacular docs: "Nutrition data is per serving. If you
+			// want the nutrition data for the entire recipe, just multiply by the
+			// number of servings.") — GetNutrient("Calories") is per SERVING, not
+			// per 100g, and this endpoint returns no serving weight in grams, so
+			// there's no way to convert it here. Same defect class as VFA_DISH:
+			// a non-per-100g value stored where genuine per-100g is expected.
+			IsPortionNormalized: false,
 		})
 	}
 	return foods
@@ -2198,6 +2271,9 @@ func mapNutrientResultsToFoods(results []spoonacular.NutrientSearchResult) []dom
 		foods = append(foods, domain.Food{
 			SpoonacularID: &id, Code: fmt.Sprintf("SPOON-%d", r.ID), Name: r.Title,
 			CaloriesPer100g: r.Calories, ImageURL: r.Image, Source: "Spoonacular",
+			// CONFIRMED per Spoonacular docs — findByNutrients' "calories" is also
+			// a per-serving value, not per-100g. See mapComplexResultsToFoods.
+			IsPortionNormalized: false,
 		})
 	}
 	return foods
@@ -2210,6 +2286,10 @@ func mapIngredientResultsToFoods(results []spoonacular.IngredientSearchResult) [
 		foods = append(foods, domain.Food{
 			SpoonacularID: &id, Code: fmt.Sprintf("SPOON-%d", r.ID), Name: r.Title,
 			ImageURL: fmt.Sprintf("https://spoonacular.com/recipeImages/%s", r.Image), Source: "Spoonacular",
+			// No CaloriesPer100g is set here at all (findByIngredients returns no
+			// nutrition data), so this flag doesn't matter either way — true kept
+			// for consistency with the safe default.
+			IsPortionNormalized: true,
 		})
 	}
 	return foods

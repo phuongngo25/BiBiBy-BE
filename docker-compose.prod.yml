@@ -124,6 +124,8 @@ services:
       # enabling this triggers one LLM call per distinct food the first time
       # it's validated after deploy. See AI_server/.env.example.
       NUTRIX_ENABLE_MEAL_ENRICHMENT: ${NUTRIX_ENABLE_MEAL_ENRICHMENT:-false}
+      NUTRIX_ENRICHMENT_LLM_PROVIDER: ${NUTRIX_ENRICHMENT_LLM_PROVIDER:-gemini}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
     ports:

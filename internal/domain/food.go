@@ -23,6 +23,18 @@ type Food struct {
 	CarbsPer100g    float64           `json:"carbs_per_100g"    gorm:"column:carbs_per_100g"`
 	FatPer100g      float64           `json:"fat_per_100g"      gorm:"column:fat_per_100g"`
 	ServingSize     string            `json:"serving_size"`
+	// IsPortionNormalized reports whether CaloriesPer100g/ProteinPer100g/
+	// CarbsPer100g/FatPer100g are already genuine per-100g values.
+	// Two known sources are NOT: VFA_DISH-seeded dishes originally stored
+	// whole-dish totals with no known portion size at import time (fixed per
+	// dish as its real serving weight is curated — see
+	// normalizeKnownVFADishServing / migration 006); Spoonacular-sourced foods
+	// (mapComplexResultsToFoods, mapNutrientResultsToFoods) store PER-SERVING
+	// nutrition (confirmed via Spoonacular's own docs: "Nutrition data is per
+	// serving"), and the API gives no serving weight in grams to convert with.
+	// Defaults to true: USDA and custom/user-entered foods already provide
+	// genuine per-100g data and need no runtime correction.
+	IsPortionNormalized bool          `json:"is_portion_normalized" gorm:"default:true"`
 	Micronutrients  datatypes.JSONMap `json:"micronutrients"    gorm:"type:jsonb;default:'{}'"`
 	IsVegan         bool              `json:"is_vegan"`
 	IsVegetarian    bool              `json:"is_vegetarian"`
@@ -87,6 +99,10 @@ type LogMealRequest struct {
 	// under CaloriesPer100g without a real 100 g basis. When provided, the ratio
 	// is computed as QuantityGrams / ReferenceWeightG instead of / 100.
 	ReferenceWeightG *float64  `json:"reference_weight_g,omitempty"`
+	// AcknowledgedRisk lets the client explicitly confirm logging a food that
+	// conflicts with the user's health profile (allergy/disease). When false,
+	// LogMeal rejects such foods with a MealBlockedError; when true, it proceeds.
+	AcknowledgedRisk bool `json:"acknowledged_risk,omitempty"`
 }
 
 // CreateFoodRequest is the input payload for adding a custom food item.
