@@ -7,9 +7,9 @@
 package intelligencepb
 
 import (
-	v1 "nutrix-backend/internal/infrastructure/grpc/pb/commonpb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	commonpb "nutrix-backend/internal/infrastructure/grpc/pb/commonpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -125,7 +125,7 @@ func (MealApprovalStatus) EnumDescriptor() ([]byte, []int) {
 
 type HealthCheckRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *v1.RequestMeta        `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Meta          *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -160,7 +160,7 @@ func (*HealthCheckRequest) Descriptor() ([]byte, []int) {
 	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *HealthCheckRequest) GetMeta() *v1.RequestMeta {
+func (x *HealthCheckRequest) GetMeta() *commonpb.RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -237,7 +237,7 @@ func (x *HealthCheckResponse) GetOntologyLoaded() bool {
 
 type AnalyzeFoodRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *v1.RequestMeta        `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Meta          *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	FoodId        string                 `protobuf:"bytes,2,opt,name=food_id,json=foodId,proto3" json:"food_id,omitempty"`
 	DiseaseIds    []string               `protobuf:"bytes,3,rep,name=disease_ids,json=diseaseIds,proto3" json:"disease_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -274,7 +274,7 @@ func (*AnalyzeFoodRequest) Descriptor() ([]byte, []int) {
 	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *AnalyzeFoodRequest) GetMeta() *v1.RequestMeta {
+func (x *AnalyzeFoodRequest) GetMeta() *commonpb.RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -297,13 +297,13 @@ func (x *AnalyzeFoodRequest) GetDiseaseIds() []string {
 
 type AnalyzeFoodResponse struct {
 	state                   protoimpl.MessageState    `protogen:"open.v1"`
-	Meta                    *v1.RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Meta                    *commonpb.RequestMeta     `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	FoodId                  string                    `protobuf:"bytes,2,opt,name=food_id,json=foodId,proto3" json:"food_id,omitempty"`
 	Safe                    bool                      `protobuf:"varint,3,opt,name=safe,proto3" json:"safe,omitempty"`
-	RiskLevel               v1.RiskLevel              `protobuf:"varint,4,opt,name=risk_level,json=riskLevel,proto3,enum=nutrix.common.v1.RiskLevel" json:"risk_level,omitempty"`
+	RiskLevel               commonpb.RiskLevel        `protobuf:"varint,4,opt,name=risk_level,json=riskLevel,proto3,enum=nutrix.common.v1.RiskLevel" json:"risk_level,omitempty"`
 	Violations              []string                  `protobuf:"bytes,5,rep,name=violations,proto3" json:"violations,omitempty"`
 	ExplanationAvailable    bool                      `protobuf:"varint,6,opt,name=explanation_available,json=explanationAvailable,proto3" json:"explanation_available,omitempty"`
-	EvidencePaths           []*v1.EvidencePath        `protobuf:"bytes,7,rep,name=evidence_paths,json=evidencePaths,proto3" json:"evidence_paths,omitempty"`
+	EvidencePaths           []*commonpb.EvidencePath  `protobuf:"bytes,7,rep,name=evidence_paths,json=evidencePaths,proto3" json:"evidence_paths,omitempty"`
 	AlternativeExplanations []*AlternativeExplanation `protobuf:"bytes,8,rep,name=alternative_explanations,json=alternativeExplanations,proto3" json:"alternative_explanations,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
@@ -339,7 +339,7 @@ func (*AnalyzeFoodResponse) Descriptor() ([]byte, []int) {
 	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *AnalyzeFoodResponse) GetMeta() *v1.RequestMeta {
+func (x *AnalyzeFoodResponse) GetMeta() *commonpb.RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -360,11 +360,11 @@ func (x *AnalyzeFoodResponse) GetSafe() bool {
 	return false
 }
 
-func (x *AnalyzeFoodResponse) GetRiskLevel() v1.RiskLevel {
+func (x *AnalyzeFoodResponse) GetRiskLevel() commonpb.RiskLevel {
 	if x != nil {
 		return x.RiskLevel
 	}
-	return v1.RiskLevel(0)
+	return commonpb.RiskLevel(0)
 }
 
 func (x *AnalyzeFoodResponse) GetViolations() []string {
@@ -381,7 +381,7 @@ func (x *AnalyzeFoodResponse) GetExplanationAvailable() bool {
 	return false
 }
 
-func (x *AnalyzeFoodResponse) GetEvidencePaths() []*v1.EvidencePath {
+func (x *AnalyzeFoodResponse) GetEvidencePaths() []*commonpb.EvidencePath {
 	if x != nil {
 		return x.EvidencePaths
 	}
@@ -397,7 +397,7 @@ func (x *AnalyzeFoodResponse) GetAlternativeExplanations() []*AlternativeExplana
 
 type GetThresholdSnapshotRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	Meta           *v1.RequestMeta        `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Meta           *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	CurrentVersion int64                  `protobuf:"varint,2,opt,name=current_version,json=currentVersion,proto3" json:"current_version,omitempty"` // Allows server to skip if no changes
 	// TD-029 Threshold Request Trust Boundary (P1)
 	// TODO: Server should load this securely from User Profile Service, not trust the client.
@@ -437,7 +437,7 @@ func (*GetThresholdSnapshotRequest) Descriptor() ([]byte, []int) {
 	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *GetThresholdSnapshotRequest) GetMeta() *v1.RequestMeta {
+func (x *GetThresholdSnapshotRequest) GetMeta() *commonpb.RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -595,7 +595,7 @@ func (x *ThresholdSnapshot) GetThresholds() []*NutrientThresholdSnapshot {
 
 type GetThresholdSnapshotResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *v1.RequestMeta        `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Meta          *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	Snapshot      *ThresholdSnapshot     `protobuf:"bytes,2,opt,name=snapshot,proto3" json:"snapshot,omitempty"` // Single source of truth.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -631,7 +631,7 @@ func (*GetThresholdSnapshotResponse) Descriptor() ([]byte, []int) {
 	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *GetThresholdSnapshotResponse) GetMeta() *v1.RequestMeta {
+func (x *GetThresholdSnapshotResponse) GetMeta() *commonpb.RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -647,7 +647,7 @@ func (x *GetThresholdSnapshotResponse) GetSnapshot() *ThresholdSnapshot {
 
 type SubmitFoodCorrectionRequest struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
-	Meta                 *v1.RequestMeta        `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Meta                 *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	RequestId            string                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	PredictedFoodName    string                 `protobuf:"bytes,3,opt,name=predicted_food_name,json=predictedFoodName,proto3" json:"predicted_food_name,omitempty"`
 	FinalFoodName        string                 `protobuf:"bytes,4,opt,name=final_food_name,json=finalFoodName,proto3" json:"final_food_name,omitempty"`
@@ -688,7 +688,7 @@ func (*SubmitFoodCorrectionRequest) Descriptor() ([]byte, []int) {
 	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *SubmitFoodCorrectionRequest) GetMeta() *v1.RequestMeta {
+func (x *SubmitFoodCorrectionRequest) GetMeta() *commonpb.RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -739,7 +739,7 @@ func (x *SubmitFoodCorrectionRequest) GetCreatedAt() int64 {
 
 type SubmitFoodCorrectionResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *v1.RequestMeta        `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Meta          *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -775,7 +775,7 @@ func (*SubmitFoodCorrectionResponse) Descriptor() ([]byte, []int) {
 	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *SubmitFoodCorrectionResponse) GetMeta() *v1.RequestMeta {
+func (x *SubmitFoodCorrectionResponse) GetMeta() *commonpb.RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -791,7 +791,7 @@ func (x *SubmitFoodCorrectionResponse) GetSuccess() bool {
 
 type GetFeedbackAnalyticsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *v1.RequestMeta        `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Meta          *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	MinCount      int32                  `protobuf:"varint,2,opt,name=min_count,json=minCount,proto3" json:"min_count,omitempty"`
 	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -828,7 +828,7 @@ func (*GetFeedbackAnalyticsRequest) Descriptor() ([]byte, []int) {
 	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *GetFeedbackAnalyticsRequest) GetMeta() *v1.RequestMeta {
+func (x *GetFeedbackAnalyticsRequest) GetMeta() *commonpb.RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -1031,7 +1031,7 @@ func (x *CorrectionVolume) GetAllTime() int64 {
 
 type GetFeedbackAnalyticsResponse struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
-	Meta                   *v1.RequestMeta        `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Meta                   *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	TopMisclassified       []*MisclassifiedFood   `protobuf:"bytes,2,rep,name=top_misclassified,json=topMisclassified,proto3" json:"top_misclassified,omitempty"`
 	ConfidenceDistribution []*ConfidenceBucket    `protobuf:"bytes,3,rep,name=confidence_distribution,json=confidenceDistribution,proto3" json:"confidence_distribution,omitempty"`
 	Volume                 *CorrectionVolume      `protobuf:"bytes,4,opt,name=volume,proto3" json:"volume,omitempty"`
@@ -1069,7 +1069,7 @@ func (*GetFeedbackAnalyticsResponse) Descriptor() ([]byte, []int) {
 	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{14}
 }
 
-func (x *GetFeedbackAnalyticsResponse) GetMeta() *v1.RequestMeta {
+func (x *GetFeedbackAnalyticsResponse) GetMeta() *commonpb.RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -1271,7 +1271,7 @@ func (x *UserNutritionGoal) GetTargets() []*NutrientTarget {
 
 type GetNutritionGapRequest struct {
 	state         protoimpl.MessageState  `protogen:"open.v1"`
-	Meta          *v1.RequestMeta         `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Meta          *commonpb.RequestMeta   `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	Goal          *UserNutritionGoal      `protobuf:"bytes,2,opt,name=goal,proto3" json:"goal,omitempty"`
 	Snapshot      *DailyNutritionSnapshot `protobuf:"bytes,3,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
 	DiseaseIds    []string                `protobuf:"bytes,4,rep,name=disease_ids,json=diseaseIds,proto3" json:"disease_ids,omitempty"` // Ignored by 15A Gap Engine, reserved for 15B
@@ -1309,7 +1309,7 @@ func (*GetNutritionGapRequest) Descriptor() ([]byte, []int) {
 	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{18}
 }
 
-func (x *GetNutritionGapRequest) GetMeta() *v1.RequestMeta {
+func (x *GetNutritionGapRequest) GetMeta() *commonpb.RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -1415,7 +1415,7 @@ func (x *NutritionGap) GetUnit() string {
 
 type GetNutritionGapResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *v1.RequestMeta        `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Meta          *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	Gaps          []*NutritionGap        `protobuf:"bytes,2,rep,name=gaps,proto3" json:"gaps,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1451,7 +1451,7 @@ func (*GetNutritionGapResponse) Descriptor() ([]byte, []int) {
 	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{20}
 }
 
-func (x *GetNutritionGapResponse) GetMeta() *v1.RequestMeta {
+func (x *GetNutritionGapResponse) GetMeta() *commonpb.RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -1519,7 +1519,7 @@ func (x *NutrientGapItem) GetGapAmount() float32 {
 
 type GetRecommendationsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *v1.RequestMeta        `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Meta          *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	Gaps          []*NutrientGapItem     `protobuf:"bytes,2,rep,name=gaps,proto3" json:"gaps,omitempty"`
 	DiseaseIds    []string               `protobuf:"bytes,3,rep,name=disease_ids,json=diseaseIds,proto3" json:"disease_ids,omitempty"`
 	ProfileHash   string                 `protobuf:"bytes,4,opt,name=profile_hash,json=profileHash,proto3" json:"profile_hash,omitempty"`
@@ -1557,7 +1557,7 @@ func (*GetRecommendationsRequest) Descriptor() ([]byte, []int) {
 	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{22}
 }
 
-func (x *GetRecommendationsRequest) GetMeta() *v1.RequestMeta {
+func (x *GetRecommendationsRequest) GetMeta() *commonpb.RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -1815,7 +1815,7 @@ func (x *Recommendation) GetTraces() []*RecommendationTrace {
 
 type GetRecommendationsResponse struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	Meta            *v1.RequestMeta        `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Meta            *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	Recommendations []*Recommendation      `protobuf:"bytes,2,rep,name=recommendations,proto3" json:"recommendations,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -1851,7 +1851,7 @@ func (*GetRecommendationsResponse) Descriptor() ([]byte, []int) {
 	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{26}
 }
 
-func (x *GetRecommendationsResponse) GetMeta() *v1.RequestMeta {
+func (x *GetRecommendationsResponse) GetMeta() *commonpb.RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -1941,8 +1941,13 @@ type CandidateMeal struct {
 	Ingredients    []string               `protobuf:"bytes,4,rep,name=ingredients,proto3" json:"ingredients,omitempty"`
 	Categories     []string               `protobuf:"bytes,5,rep,name=categories,proto3" json:"categories,omitempty"`
 	ProteinSources []string               `protobuf:"bytes,6,rep,name=protein_sources,json=proteinSources,proto3" json:"protein_sources,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Resolved food names, keyed by food_id — AI_server has no Postgres `foods`
+	// catalog table of its own, so Go (which already has domain.Food loaded)
+	// passes names through here for LLM enrichment prompts instead of AI_server
+	// reaching back across services for a single string per food.
+	FoodRefs      []*FoodRef `protobuf:"bytes,7,rep,name=food_refs,json=foodRefs,proto3" json:"food_refs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CandidateMeal) Reset() {
@@ -2017,6 +2022,73 @@ func (x *CandidateMeal) GetProteinSources() []string {
 	return nil
 }
 
+func (x *CandidateMeal) GetFoodRefs() []*FoodRef {
+	if x != nil {
+		return x.FoodRefs
+	}
+	return nil
+}
+
+type FoodRef struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FoodId        string                 `protobuf:"bytes,1,opt,name=food_id,json=foodId,proto3" json:"food_id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	NameVi        string                 `protobuf:"bytes,3,opt,name=name_vi,json=nameVi,proto3" json:"name_vi,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FoodRef) Reset() {
+	*x = FoodRef{}
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FoodRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FoodRef) ProtoMessage() {}
+
+func (x *FoodRef) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FoodRef.ProtoReflect.Descriptor instead.
+func (*FoodRef) Descriptor() ([]byte, []int) {
+	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *FoodRef) GetFoodId() string {
+	if x != nil {
+		return x.FoodId
+	}
+	return ""
+}
+
+func (x *FoodRef) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *FoodRef) GetNameVi() string {
+	if x != nil {
+		return x.NameVi
+	}
+	return ""
+}
+
 type MealFixImpact struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SafetyDelta   float64                `protobuf:"fixed64,1,opt,name=safety_delta,json=safetyDelta,proto3" json:"safety_delta,omitempty"`
@@ -2030,7 +2102,7 @@ type MealFixImpact struct {
 
 func (x *MealFixImpact) Reset() {
 	*x = MealFixImpact{}
-	mi := &file_v1_nutrition_intelligence_proto_msgTypes[29]
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2042,7 +2114,7 @@ func (x *MealFixImpact) String() string {
 func (*MealFixImpact) ProtoMessage() {}
 
 func (x *MealFixImpact) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_nutrition_intelligence_proto_msgTypes[29]
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2055,7 +2127,7 @@ func (x *MealFixImpact) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MealFixImpact.ProtoReflect.Descriptor instead.
 func (*MealFixImpact) Descriptor() ([]byte, []int) {
-	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{29}
+	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *MealFixImpact) GetSafetyDelta() float64 {
@@ -2104,7 +2176,7 @@ type MealFixSuggestion struct {
 
 func (x *MealFixSuggestion) Reset() {
 	*x = MealFixSuggestion{}
-	mi := &file_v1_nutrition_intelligence_proto_msgTypes[30]
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2116,7 +2188,7 @@ func (x *MealFixSuggestion) String() string {
 func (*MealFixSuggestion) ProtoMessage() {}
 
 func (x *MealFixSuggestion) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_nutrition_intelligence_proto_msgTypes[30]
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2129,7 +2201,7 @@ func (x *MealFixSuggestion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MealFixSuggestion.ProtoReflect.Descriptor instead.
 func (*MealFixSuggestion) Descriptor() ([]byte, []int) {
-	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{30}
+	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *MealFixSuggestion) GetTitle() string {
@@ -2157,7 +2229,7 @@ type MealViolation struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	ViolationType    string                 `protobuf:"bytes,1,opt,name=violation_type,json=violationType,proto3" json:"violation_type,omitempty"` // "allergy", "hypertension", "diabetes"
 	Description      string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	Severity         v1.RiskLevel           `protobuf:"varint,3,opt,name=severity,proto3,enum=nutrix.common.v1.RiskLevel" json:"severity,omitempty"`
+	Severity         commonpb.RiskLevel     `protobuf:"varint,3,opt,name=severity,proto3,enum=nutrix.common.v1.RiskLevel" json:"severity,omitempty"`
 	OffendingFoodIds []string               `protobuf:"bytes,4,rep,name=offending_food_ids,json=offendingFoodIds,proto3" json:"offending_food_ids,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -2165,7 +2237,7 @@ type MealViolation struct {
 
 func (x *MealViolation) Reset() {
 	*x = MealViolation{}
-	mi := &file_v1_nutrition_intelligence_proto_msgTypes[31]
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2177,7 +2249,7 @@ func (x *MealViolation) String() string {
 func (*MealViolation) ProtoMessage() {}
 
 func (x *MealViolation) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_nutrition_intelligence_proto_msgTypes[31]
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2190,7 +2262,7 @@ func (x *MealViolation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MealViolation.ProtoReflect.Descriptor instead.
 func (*MealViolation) Descriptor() ([]byte, []int) {
-	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{31}
+	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *MealViolation) GetViolationType() string {
@@ -2207,11 +2279,11 @@ func (x *MealViolation) GetDescription() string {
 	return ""
 }
 
-func (x *MealViolation) GetSeverity() v1.RiskLevel {
+func (x *MealViolation) GetSeverity() commonpb.RiskLevel {
 	if x != nil {
 		return x.Severity
 	}
-	return v1.RiskLevel(0)
+	return commonpb.RiskLevel(0)
 }
 
 func (x *MealViolation) GetOffendingFoodIds() []string {
@@ -2223,7 +2295,7 @@ func (x *MealViolation) GetOffendingFoodIds() []string {
 
 type AnalyzeMealRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *v1.RequestMeta        `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Meta          *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	Candidate     *CandidateMeal         `protobuf:"bytes,2,opt,name=candidate,proto3" json:"candidate,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2231,7 +2303,7 @@ type AnalyzeMealRequest struct {
 
 func (x *AnalyzeMealRequest) Reset() {
 	*x = AnalyzeMealRequest{}
-	mi := &file_v1_nutrition_intelligence_proto_msgTypes[32]
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2243,7 +2315,7 @@ func (x *AnalyzeMealRequest) String() string {
 func (*AnalyzeMealRequest) ProtoMessage() {}
 
 func (x *AnalyzeMealRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_nutrition_intelligence_proto_msgTypes[32]
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2256,10 +2328,10 @@ func (x *AnalyzeMealRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnalyzeMealRequest.ProtoReflect.Descriptor instead.
 func (*AnalyzeMealRequest) Descriptor() ([]byte, []int) {
-	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{32}
+	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{33}
 }
 
-func (x *AnalyzeMealRequest) GetMeta() *v1.RequestMeta {
+func (x *AnalyzeMealRequest) GetMeta() *commonpb.RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -2274,19 +2346,24 @@ func (x *AnalyzeMealRequest) GetCandidate() *CandidateMeal {
 }
 
 type AnalyzeMealResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *v1.RequestMeta        `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	Status        MealApprovalStatus     `protobuf:"varint,2,opt,name=status,proto3,enum=nutrix.intelligence.v1.MealApprovalStatus" json:"status,omitempty"`
-	Score         *MealScore             `protobuf:"bytes,3,opt,name=score,proto3" json:"score,omitempty"`
-	Violations    []*MealViolation       `protobuf:"bytes,4,rep,name=violations,proto3" json:"violations,omitempty"`
-	Fixes         []*MealFixSuggestion   `protobuf:"bytes,5,rep,name=fixes,proto3" json:"fixes,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Meta       *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Status     MealApprovalStatus     `protobuf:"varint,2,opt,name=status,proto3,enum=nutrix.intelligence.v1.MealApprovalStatus" json:"status,omitempty"`
+	Score      *MealScore             `protobuf:"bytes,3,opt,name=score,proto3" json:"score,omitempty"`
+	Violations []*MealViolation       `protobuf:"bytes,4,rep,name=violations,proto3" json:"violations,omitempty"`
+	Fixes      []*MealFixSuggestion   `protobuf:"bytes,5,rep,name=fixes,proto3" json:"fixes,omitempty"`
+	// LLM/KG-derived serving weight + ingredient estimate for the first food_id
+	// in the candidate (mirrors domain.MealEnrichment on the Go side, which is
+	// already a single value, not a list — one per validate call, matching how
+	// meal-validate is invoked per-food today).
+	Enrichment    *MealEnrichment `protobuf:"bytes,6,opt,name=enrichment,proto3" json:"enrichment,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AnalyzeMealResponse) Reset() {
 	*x = AnalyzeMealResponse{}
-	mi := &file_v1_nutrition_intelligence_proto_msgTypes[33]
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2298,7 +2375,7 @@ func (x *AnalyzeMealResponse) String() string {
 func (*AnalyzeMealResponse) ProtoMessage() {}
 
 func (x *AnalyzeMealResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_nutrition_intelligence_proto_msgTypes[33]
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2311,10 +2388,10 @@ func (x *AnalyzeMealResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnalyzeMealResponse.ProtoReflect.Descriptor instead.
 func (*AnalyzeMealResponse) Descriptor() ([]byte, []int) {
-	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{33}
+	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{34}
 }
 
-func (x *AnalyzeMealResponse) GetMeta() *v1.RequestMeta {
+func (x *AnalyzeMealResponse) GetMeta() *commonpb.RequestMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -2347,6 +2424,149 @@ func (x *AnalyzeMealResponse) GetFixes() []*MealFixSuggestion {
 		return x.Fixes
 	}
 	return nil
+}
+
+func (x *AnalyzeMealResponse) GetEnrichment() *MealEnrichment {
+	if x != nil {
+		return x.Enrichment
+	}
+	return nil
+}
+
+type MealIngredientDetail struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	AmountG       float64                `protobuf:"fixed64,2,opt,name=amount_g,json=amountG,proto3" json:"amount_g,omitempty"`
+	Confidence    float64                `protobuf:"fixed64,3,opt,name=confidence,proto3" json:"confidence,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MealIngredientDetail) Reset() {
+	*x = MealIngredientDetail{}
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MealIngredientDetail) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MealIngredientDetail) ProtoMessage() {}
+
+func (x *MealIngredientDetail) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MealIngredientDetail.ProtoReflect.Descriptor instead.
+func (*MealIngredientDetail) Descriptor() ([]byte, []int) {
+	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *MealIngredientDetail) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MealIngredientDetail) GetAmountG() float64 {
+	if x != nil {
+		return x.AmountG
+	}
+	return 0
+}
+
+func (x *MealIngredientDetail) GetConfidence() float64 {
+	if x != nil {
+		return x.Confidence
+	}
+	return 0
+}
+
+type MealEnrichment struct {
+	state                 protoimpl.MessageState  `protogen:"open.v1"`
+	DishName              string                  `protobuf:"bytes,1,opt,name=dish_name,json=dishName,proto3" json:"dish_name,omitempty"`
+	EstimatedServingSizeG float64                 `protobuf:"fixed64,2,opt,name=estimated_serving_size_g,json=estimatedServingSizeG,proto3" json:"estimated_serving_size_g,omitempty"`
+	Ingredients           []*MealIngredientDetail `protobuf:"bytes,3,rep,name=ingredients,proto3" json:"ingredients,omitempty"`
+	Source                string                  `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"` // e.g. "llm", "llm_cached"
+	Confidence            float64                 `protobuf:"fixed64,5,opt,name=confidence,proto3" json:"confidence,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *MealEnrichment) Reset() {
+	*x = MealEnrichment{}
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MealEnrichment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MealEnrichment) ProtoMessage() {}
+
+func (x *MealEnrichment) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MealEnrichment.ProtoReflect.Descriptor instead.
+func (*MealEnrichment) Descriptor() ([]byte, []int) {
+	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *MealEnrichment) GetDishName() string {
+	if x != nil {
+		return x.DishName
+	}
+	return ""
+}
+
+func (x *MealEnrichment) GetEstimatedServingSizeG() float64 {
+	if x != nil {
+		return x.EstimatedServingSizeG
+	}
+	return 0
+}
+
+func (x *MealEnrichment) GetIngredients() []*MealIngredientDetail {
+	if x != nil {
+		return x.Ingredients
+	}
+	return nil
+}
+
+func (x *MealEnrichment) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *MealEnrichment) GetConfidence() float64 {
+	if x != nil {
+		return x.Confidence
+	}
+	return 0
 }
 
 var File_v1_nutrition_intelligence_proto protoreflect.FileDescriptor
@@ -2507,7 +2727,7 @@ const file_v1_nutrition_intelligence_proto_rawDesc = "" +
 	"\vmacro_score\x18\x02 \x01(\x01R\n" +
 	"macroScore\x12/\n" +
 	"\x13micronutrient_score\x18\x03 \x01(\x01R\x12micronutrientScore\x12)\n" +
-	"\x10constraint_score\x18\x04 \x01(\x01R\x0fconstraintScore\"\xcb\x01\n" +
+	"\x10constraint_score\x18\x04 \x01(\x01R\x0fconstraintScore\"\x89\x02\n" +
 	"\rCandidateMeal\x12\x17\n" +
 	"\ameal_id\x18\x01 \x01(\tR\x06mealId\x12\x19\n" +
 	"\bfood_ids\x18\x02 \x03(\tR\afoodIds\x12\x1b\n" +
@@ -2516,7 +2736,12 @@ const file_v1_nutrition_intelligence_proto_rawDesc = "" +
 	"\n" +
 	"categories\x18\x05 \x03(\tR\n" +
 	"categories\x12'\n" +
-	"\x0fprotein_sources\x18\x06 \x03(\tR\x0eproteinSources\"\xc2\x01\n" +
+	"\x0fprotein_sources\x18\x06 \x03(\tR\x0eproteinSources\x12<\n" +
+	"\tfood_refs\x18\a \x03(\v2\x1f.nutrix.intelligence.v1.FoodRefR\bfoodRefs\"O\n" +
+	"\aFoodRef\x12\x17\n" +
+	"\afood_id\x18\x01 \x01(\tR\x06foodId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x17\n" +
+	"\aname_vi\x18\x03 \x01(\tR\x06nameVi\"\xc2\x01\n" +
 	"\rMealFixImpact\x12!\n" +
 	"\fsafety_delta\x18\x01 \x01(\x01R\vsafetyDelta\x12#\n" +
 	"\rprotein_delta\x18\x02 \x01(\x01R\fproteinDelta\x12%\n" +
@@ -2535,7 +2760,7 @@ const file_v1_nutrition_intelligence_proto_rawDesc = "" +
 	"\x12offending_food_ids\x18\x04 \x03(\tR\x10offendingFoodIds\"\x8c\x01\n" +
 	"\x12AnalyzeMealRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.nutrix.common.v1.RequestMetaR\x04meta\x12C\n" +
-	"\tcandidate\x18\x02 \x01(\v2%.nutrix.intelligence.v1.CandidateMealR\tcandidate\"\xcd\x02\n" +
+	"\tcandidate\x18\x02 \x01(\v2%.nutrix.intelligence.v1.CandidateMealR\tcandidate\"\x95\x03\n" +
 	"\x13AnalyzeMealResponse\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.nutrix.common.v1.RequestMetaR\x04meta\x12B\n" +
 	"\x06status\x18\x02 \x01(\x0e2*.nutrix.intelligence.v1.MealApprovalStatusR\x06status\x127\n" +
@@ -2543,7 +2768,24 @@ const file_v1_nutrition_intelligence_proto_rawDesc = "" +
 	"\n" +
 	"violations\x18\x04 \x03(\v2%.nutrix.intelligence.v1.MealViolationR\n" +
 	"violations\x12?\n" +
-	"\x05fixes\x18\x05 \x03(\v2).nutrix.intelligence.v1.MealFixSuggestionR\x05fixes*^\n" +
+	"\x05fixes\x18\x05 \x03(\v2).nutrix.intelligence.v1.MealFixSuggestionR\x05fixes\x12F\n" +
+	"\n" +
+	"enrichment\x18\x06 \x01(\v2&.nutrix.intelligence.v1.MealEnrichmentR\n" +
+	"enrichment\"e\n" +
+	"\x14MealIngredientDetail\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
+	"\bamount_g\x18\x02 \x01(\x01R\aamountG\x12\x1e\n" +
+	"\n" +
+	"confidence\x18\x03 \x01(\x01R\n" +
+	"confidence\"\xee\x01\n" +
+	"\x0eMealEnrichment\x12\x1b\n" +
+	"\tdish_name\x18\x01 \x01(\tR\bdishName\x127\n" +
+	"\x18estimated_serving_size_g\x18\x02 \x01(\x01R\x15estimatedServingSizeG\x12N\n" +
+	"\vingredients\x18\x03 \x03(\v2,.nutrix.intelligence.v1.MealIngredientDetailR\vingredients\x12\x16\n" +
+	"\x06source\x18\x04 \x01(\tR\x06source\x12\x1e\n" +
+	"\n" +
+	"confidence\x18\x05 \x01(\x01R\n" +
+	"confidence*^\n" +
 	"\x18RecommendationReasonType\x12*\n" +
 	"&RECOMMENDATION_REASON_TYPE_UNSPECIFIED\x10\x00\x12\t\n" +
 	"\x05BOOST\x10\x01\x12\v\n" +
@@ -2576,7 +2818,7 @@ func file_v1_nutrition_intelligence_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_nutrition_intelligence_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_v1_nutrition_intelligence_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+var file_v1_nutrition_intelligence_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
 var file_v1_nutrition_intelligence_proto_goTypes = []any{
 	(RecommendationReasonType)(0),        // 0: nutrix.intelligence.v1.RecommendationReasonType
 	(MealApprovalStatus)(0),              // 1: nutrix.intelligence.v1.MealApprovalStatus
@@ -2609,79 +2851,85 @@ var file_v1_nutrition_intelligence_proto_goTypes = []any{
 	(*GetRecommendationsResponse)(nil),   // 28: nutrix.intelligence.v1.GetRecommendationsResponse
 	(*MealScore)(nil),                    // 29: nutrix.intelligence.v1.MealScore
 	(*CandidateMeal)(nil),                // 30: nutrix.intelligence.v1.CandidateMeal
-	(*MealFixImpact)(nil),                // 31: nutrix.intelligence.v1.MealFixImpact
-	(*MealFixSuggestion)(nil),            // 32: nutrix.intelligence.v1.MealFixSuggestion
-	(*MealViolation)(nil),                // 33: nutrix.intelligence.v1.MealViolation
-	(*AnalyzeMealRequest)(nil),           // 34: nutrix.intelligence.v1.AnalyzeMealRequest
-	(*AnalyzeMealResponse)(nil),          // 35: nutrix.intelligence.v1.AnalyzeMealResponse
-	nil,                                  // 36: nutrix.intelligence.v1.DailyNutritionSnapshot.MicronutrientsEntry
-	(*v1.RequestMeta)(nil),               // 37: nutrix.common.v1.RequestMeta
-	(v1.RiskLevel)(0),                    // 38: nutrix.common.v1.RiskLevel
-	(*v1.EvidencePath)(nil),              // 39: nutrix.common.v1.EvidencePath
+	(*FoodRef)(nil),                      // 31: nutrix.intelligence.v1.FoodRef
+	(*MealFixImpact)(nil),                // 32: nutrix.intelligence.v1.MealFixImpact
+	(*MealFixSuggestion)(nil),            // 33: nutrix.intelligence.v1.MealFixSuggestion
+	(*MealViolation)(nil),                // 34: nutrix.intelligence.v1.MealViolation
+	(*AnalyzeMealRequest)(nil),           // 35: nutrix.intelligence.v1.AnalyzeMealRequest
+	(*AnalyzeMealResponse)(nil),          // 36: nutrix.intelligence.v1.AnalyzeMealResponse
+	(*MealIngredientDetail)(nil),         // 37: nutrix.intelligence.v1.MealIngredientDetail
+	(*MealEnrichment)(nil),               // 38: nutrix.intelligence.v1.MealEnrichment
+	nil,                                  // 39: nutrix.intelligence.v1.DailyNutritionSnapshot.MicronutrientsEntry
+	(*commonpb.RequestMeta)(nil),         // 40: nutrix.common.v1.RequestMeta
+	(commonpb.RiskLevel)(0),              // 41: nutrix.common.v1.RiskLevel
+	(*commonpb.EvidencePath)(nil),        // 42: nutrix.common.v1.EvidencePath
 }
 var file_v1_nutrition_intelligence_proto_depIdxs = []int32{
-	37, // 0: nutrix.intelligence.v1.HealthCheckRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	37, // 1: nutrix.intelligence.v1.AnalyzeFoodRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	37, // 2: nutrix.intelligence.v1.AnalyzeFoodResponse.meta:type_name -> nutrix.common.v1.RequestMeta
-	38, // 3: nutrix.intelligence.v1.AnalyzeFoodResponse.risk_level:type_name -> nutrix.common.v1.RiskLevel
-	39, // 4: nutrix.intelligence.v1.AnalyzeFoodResponse.evidence_paths:type_name -> nutrix.common.v1.EvidencePath
+	40, // 0: nutrix.intelligence.v1.HealthCheckRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	40, // 1: nutrix.intelligence.v1.AnalyzeFoodRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	40, // 2: nutrix.intelligence.v1.AnalyzeFoodResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	41, // 3: nutrix.intelligence.v1.AnalyzeFoodResponse.risk_level:type_name -> nutrix.common.v1.RiskLevel
+	42, // 4: nutrix.intelligence.v1.AnalyzeFoodResponse.evidence_paths:type_name -> nutrix.common.v1.EvidencePath
 	26, // 5: nutrix.intelligence.v1.AnalyzeFoodResponse.alternative_explanations:type_name -> nutrix.intelligence.v1.AlternativeExplanation
-	37, // 6: nutrix.intelligence.v1.GetThresholdSnapshotRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	40, // 6: nutrix.intelligence.v1.GetThresholdSnapshotRequest.meta:type_name -> nutrix.common.v1.RequestMeta
 	7,  // 7: nutrix.intelligence.v1.ThresholdSnapshot.thresholds:type_name -> nutrix.intelligence.v1.NutrientThresholdSnapshot
-	37, // 8: nutrix.intelligence.v1.GetThresholdSnapshotResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	40, // 8: nutrix.intelligence.v1.GetThresholdSnapshotResponse.meta:type_name -> nutrix.common.v1.RequestMeta
 	8,  // 9: nutrix.intelligence.v1.GetThresholdSnapshotResponse.snapshot:type_name -> nutrix.intelligence.v1.ThresholdSnapshot
-	37, // 10: nutrix.intelligence.v1.SubmitFoodCorrectionRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	37, // 11: nutrix.intelligence.v1.SubmitFoodCorrectionResponse.meta:type_name -> nutrix.common.v1.RequestMeta
-	37, // 12: nutrix.intelligence.v1.GetFeedbackAnalyticsRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	37, // 13: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	40, // 10: nutrix.intelligence.v1.SubmitFoodCorrectionRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	40, // 11: nutrix.intelligence.v1.SubmitFoodCorrectionResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	40, // 12: nutrix.intelligence.v1.GetFeedbackAnalyticsRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	40, // 13: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.meta:type_name -> nutrix.common.v1.RequestMeta
 	13, // 14: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.top_misclassified:type_name -> nutrix.intelligence.v1.MisclassifiedFood
 	14, // 15: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.confidence_distribution:type_name -> nutrix.intelligence.v1.ConfidenceBucket
 	15, // 16: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.volume:type_name -> nutrix.intelligence.v1.CorrectionVolume
-	36, // 17: nutrix.intelligence.v1.DailyNutritionSnapshot.micronutrients:type_name -> nutrix.intelligence.v1.DailyNutritionSnapshot.MicronutrientsEntry
+	39, // 17: nutrix.intelligence.v1.DailyNutritionSnapshot.micronutrients:type_name -> nutrix.intelligence.v1.DailyNutritionSnapshot.MicronutrientsEntry
 	18, // 18: nutrix.intelligence.v1.UserNutritionGoal.targets:type_name -> nutrix.intelligence.v1.NutrientTarget
-	37, // 19: nutrix.intelligence.v1.GetNutritionGapRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	40, // 19: nutrix.intelligence.v1.GetNutritionGapRequest.meta:type_name -> nutrix.common.v1.RequestMeta
 	19, // 20: nutrix.intelligence.v1.GetNutritionGapRequest.goal:type_name -> nutrix.intelligence.v1.UserNutritionGoal
 	17, // 21: nutrix.intelligence.v1.GetNutritionGapRequest.snapshot:type_name -> nutrix.intelligence.v1.DailyNutritionSnapshot
-	37, // 22: nutrix.intelligence.v1.GetNutritionGapResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	40, // 22: nutrix.intelligence.v1.GetNutritionGapResponse.meta:type_name -> nutrix.common.v1.RequestMeta
 	21, // 23: nutrix.intelligence.v1.GetNutritionGapResponse.gaps:type_name -> nutrix.intelligence.v1.NutritionGap
-	37, // 24: nutrix.intelligence.v1.GetRecommendationsRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	40, // 24: nutrix.intelligence.v1.GetRecommendationsRequest.meta:type_name -> nutrix.common.v1.RequestMeta
 	23, // 25: nutrix.intelligence.v1.GetRecommendationsRequest.gaps:type_name -> nutrix.intelligence.v1.NutrientGapItem
 	0,  // 26: nutrix.intelligence.v1.RecommendationTrace.reason_type:type_name -> nutrix.intelligence.v1.RecommendationReasonType
 	25, // 27: nutrix.intelligence.v1.AlternativeExplanation.recommendation_trace:type_name -> nutrix.intelligence.v1.RecommendationTrace
 	25, // 28: nutrix.intelligence.v1.Recommendation.traces:type_name -> nutrix.intelligence.v1.RecommendationTrace
-	37, // 29: nutrix.intelligence.v1.GetRecommendationsResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	40, // 29: nutrix.intelligence.v1.GetRecommendationsResponse.meta:type_name -> nutrix.common.v1.RequestMeta
 	27, // 30: nutrix.intelligence.v1.GetRecommendationsResponse.recommendations:type_name -> nutrix.intelligence.v1.Recommendation
-	30, // 31: nutrix.intelligence.v1.MealFixSuggestion.replacement:type_name -> nutrix.intelligence.v1.CandidateMeal
-	31, // 32: nutrix.intelligence.v1.MealFixSuggestion.impact:type_name -> nutrix.intelligence.v1.MealFixImpact
-	38, // 33: nutrix.intelligence.v1.MealViolation.severity:type_name -> nutrix.common.v1.RiskLevel
-	37, // 34: nutrix.intelligence.v1.AnalyzeMealRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	30, // 35: nutrix.intelligence.v1.AnalyzeMealRequest.candidate:type_name -> nutrix.intelligence.v1.CandidateMeal
-	37, // 36: nutrix.intelligence.v1.AnalyzeMealResponse.meta:type_name -> nutrix.common.v1.RequestMeta
-	1,  // 37: nutrix.intelligence.v1.AnalyzeMealResponse.status:type_name -> nutrix.intelligence.v1.MealApprovalStatus
-	29, // 38: nutrix.intelligence.v1.AnalyzeMealResponse.score:type_name -> nutrix.intelligence.v1.MealScore
-	33, // 39: nutrix.intelligence.v1.AnalyzeMealResponse.violations:type_name -> nutrix.intelligence.v1.MealViolation
-	32, // 40: nutrix.intelligence.v1.AnalyzeMealResponse.fixes:type_name -> nutrix.intelligence.v1.MealFixSuggestion
-	2,  // 41: nutrix.intelligence.v1.NutritionIntelligenceService.HealthCheck:input_type -> nutrix.intelligence.v1.HealthCheckRequest
-	4,  // 42: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeFood:input_type -> nutrix.intelligence.v1.AnalyzeFoodRequest
-	6,  // 43: nutrix.intelligence.v1.NutritionIntelligenceService.GetThresholdSnapshot:input_type -> nutrix.intelligence.v1.GetThresholdSnapshotRequest
-	10, // 44: nutrix.intelligence.v1.NutritionIntelligenceService.SubmitFoodCorrection:input_type -> nutrix.intelligence.v1.SubmitFoodCorrectionRequest
-	12, // 45: nutrix.intelligence.v1.NutritionIntelligenceService.GetFeedbackAnalytics:input_type -> nutrix.intelligence.v1.GetFeedbackAnalyticsRequest
-	20, // 46: nutrix.intelligence.v1.NutritionIntelligenceService.GetNutritionGap:input_type -> nutrix.intelligence.v1.GetNutritionGapRequest
-	24, // 47: nutrix.intelligence.v1.NutritionIntelligenceService.GetRecommendations:input_type -> nutrix.intelligence.v1.GetRecommendationsRequest
-	34, // 48: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeMeal:input_type -> nutrix.intelligence.v1.AnalyzeMealRequest
-	3,  // 49: nutrix.intelligence.v1.NutritionIntelligenceService.HealthCheck:output_type -> nutrix.intelligence.v1.HealthCheckResponse
-	5,  // 50: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeFood:output_type -> nutrix.intelligence.v1.AnalyzeFoodResponse
-	9,  // 51: nutrix.intelligence.v1.NutritionIntelligenceService.GetThresholdSnapshot:output_type -> nutrix.intelligence.v1.GetThresholdSnapshotResponse
-	11, // 52: nutrix.intelligence.v1.NutritionIntelligenceService.SubmitFoodCorrection:output_type -> nutrix.intelligence.v1.SubmitFoodCorrectionResponse
-	16, // 53: nutrix.intelligence.v1.NutritionIntelligenceService.GetFeedbackAnalytics:output_type -> nutrix.intelligence.v1.GetFeedbackAnalyticsResponse
-	22, // 54: nutrix.intelligence.v1.NutritionIntelligenceService.GetNutritionGap:output_type -> nutrix.intelligence.v1.GetNutritionGapResponse
-	28, // 55: nutrix.intelligence.v1.NutritionIntelligenceService.GetRecommendations:output_type -> nutrix.intelligence.v1.GetRecommendationsResponse
-	35, // 56: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeMeal:output_type -> nutrix.intelligence.v1.AnalyzeMealResponse
-	49, // [49:57] is the sub-list for method output_type
-	41, // [41:49] is the sub-list for method input_type
-	41, // [41:41] is the sub-list for extension type_name
-	41, // [41:41] is the sub-list for extension extendee
-	0,  // [0:41] is the sub-list for field type_name
+	31, // 31: nutrix.intelligence.v1.CandidateMeal.food_refs:type_name -> nutrix.intelligence.v1.FoodRef
+	30, // 32: nutrix.intelligence.v1.MealFixSuggestion.replacement:type_name -> nutrix.intelligence.v1.CandidateMeal
+	32, // 33: nutrix.intelligence.v1.MealFixSuggestion.impact:type_name -> nutrix.intelligence.v1.MealFixImpact
+	41, // 34: nutrix.intelligence.v1.MealViolation.severity:type_name -> nutrix.common.v1.RiskLevel
+	40, // 35: nutrix.intelligence.v1.AnalyzeMealRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	30, // 36: nutrix.intelligence.v1.AnalyzeMealRequest.candidate:type_name -> nutrix.intelligence.v1.CandidateMeal
+	40, // 37: nutrix.intelligence.v1.AnalyzeMealResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	1,  // 38: nutrix.intelligence.v1.AnalyzeMealResponse.status:type_name -> nutrix.intelligence.v1.MealApprovalStatus
+	29, // 39: nutrix.intelligence.v1.AnalyzeMealResponse.score:type_name -> nutrix.intelligence.v1.MealScore
+	34, // 40: nutrix.intelligence.v1.AnalyzeMealResponse.violations:type_name -> nutrix.intelligence.v1.MealViolation
+	33, // 41: nutrix.intelligence.v1.AnalyzeMealResponse.fixes:type_name -> nutrix.intelligence.v1.MealFixSuggestion
+	38, // 42: nutrix.intelligence.v1.AnalyzeMealResponse.enrichment:type_name -> nutrix.intelligence.v1.MealEnrichment
+	37, // 43: nutrix.intelligence.v1.MealEnrichment.ingredients:type_name -> nutrix.intelligence.v1.MealIngredientDetail
+	2,  // 44: nutrix.intelligence.v1.NutritionIntelligenceService.HealthCheck:input_type -> nutrix.intelligence.v1.HealthCheckRequest
+	4,  // 45: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeFood:input_type -> nutrix.intelligence.v1.AnalyzeFoodRequest
+	6,  // 46: nutrix.intelligence.v1.NutritionIntelligenceService.GetThresholdSnapshot:input_type -> nutrix.intelligence.v1.GetThresholdSnapshotRequest
+	10, // 47: nutrix.intelligence.v1.NutritionIntelligenceService.SubmitFoodCorrection:input_type -> nutrix.intelligence.v1.SubmitFoodCorrectionRequest
+	12, // 48: nutrix.intelligence.v1.NutritionIntelligenceService.GetFeedbackAnalytics:input_type -> nutrix.intelligence.v1.GetFeedbackAnalyticsRequest
+	20, // 49: nutrix.intelligence.v1.NutritionIntelligenceService.GetNutritionGap:input_type -> nutrix.intelligence.v1.GetNutritionGapRequest
+	24, // 50: nutrix.intelligence.v1.NutritionIntelligenceService.GetRecommendations:input_type -> nutrix.intelligence.v1.GetRecommendationsRequest
+	35, // 51: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeMeal:input_type -> nutrix.intelligence.v1.AnalyzeMealRequest
+	3,  // 52: nutrix.intelligence.v1.NutritionIntelligenceService.HealthCheck:output_type -> nutrix.intelligence.v1.HealthCheckResponse
+	5,  // 53: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeFood:output_type -> nutrix.intelligence.v1.AnalyzeFoodResponse
+	9,  // 54: nutrix.intelligence.v1.NutritionIntelligenceService.GetThresholdSnapshot:output_type -> nutrix.intelligence.v1.GetThresholdSnapshotResponse
+	11, // 55: nutrix.intelligence.v1.NutritionIntelligenceService.SubmitFoodCorrection:output_type -> nutrix.intelligence.v1.SubmitFoodCorrectionResponse
+	16, // 56: nutrix.intelligence.v1.NutritionIntelligenceService.GetFeedbackAnalytics:output_type -> nutrix.intelligence.v1.GetFeedbackAnalyticsResponse
+	22, // 57: nutrix.intelligence.v1.NutritionIntelligenceService.GetNutritionGap:output_type -> nutrix.intelligence.v1.GetNutritionGapResponse
+	28, // 58: nutrix.intelligence.v1.NutritionIntelligenceService.GetRecommendations:output_type -> nutrix.intelligence.v1.GetRecommendationsResponse
+	36, // 59: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeMeal:output_type -> nutrix.intelligence.v1.AnalyzeMealResponse
+	52, // [52:60] is the sub-list for method output_type
+	44, // [44:52] is the sub-list for method input_type
+	44, // [44:44] is the sub-list for extension type_name
+	44, // [44:44] is the sub-list for extension extendee
+	0,  // [0:44] is the sub-list for field type_name
 }
 
 func init() { file_v1_nutrition_intelligence_proto_init() }
@@ -2695,7 +2943,7 @@ func file_v1_nutrition_intelligence_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_nutrition_intelligence_proto_rawDesc), len(file_v1_nutrition_intelligence_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   35,
+			NumMessages:   38,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

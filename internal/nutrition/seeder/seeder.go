@@ -163,14 +163,15 @@ func seedVFAFood(db *gorm.DB, path string) error {
 		}
 
 		food := domain.Food{
-			Code:           "VFA-" + dto.Code,
-			Name:           dto.NameEn,
-			NameEn:         dto.NameEn,
-			NameVi:         dto.NameVi,
-			Category:       cat,
-			Source:         "VFA",
-			IsVerified:     true,
-			Micronutrients: make(datatypes.JSONMap),
+			Code:                "VFA-" + dto.Code,
+			Name:                dto.NameEn,
+			NameEn:              dto.NameEn,
+			NameVi:              dto.NameVi,
+			Category:            cat,
+			Source:              "VFA",
+			IsVerified:          true,
+			IsPortionNormalized: true, // plain ingredient, genuine per-100g data
+			Micronutrients:      make(datatypes.JSONMap),
 		}
 
 		if food.Name == "" {
@@ -186,7 +187,7 @@ func seedVFAFood(db *gorm.DB, path string) error {
 				food.ProteinPer100g = nut.Value
 			case strings.Contains(nName, "lipid") || strings.Contains(nName, "fat"):
 				food.FatPer100g = nut.Value
-			case strings.Contains(nName, "carbohydrate"):
+			case strings.Contains(nName, "carbohydrate") || strings.Contains(nName, "glucid"):
 				food.CarbsPer100g = nut.Value
 			default:
 				food.Micronutrients[nut.NameEn] = fmt.Sprintf("%f %s", nut.Value, nut.Unit)
@@ -229,15 +230,16 @@ func seedVFADish(db *gorm.DB, path string) error {
 		}
 
 		food := domain.Food{
-			Code:           "DISH-" + dto.Code,
-			Name:           dto.NameEn,
-			NameEn:         dto.NameEn,
-			NameVi:         dto.NameVi,
-			Category:       "Prepared Dish",
-			Source:         "VFA_DISH",
-			IsVerified:     true,
-			ServingSize:    "100g",
-			Micronutrients: make(datatypes.JSONMap),
+			Code:                "DISH-" + dto.Code,
+			Name:                dto.NameEn,
+			NameEn:              dto.NameEn,
+			NameVi:              dto.NameVi,
+			Category:            "Prepared Dish",
+			Source:              "VFA_DISH",
+			IsVerified:          true,
+			ServingSize:         "100g",
+			IsPortionNormalized: false, // flipped to true below for curated dishes
+			Micronutrients:      make(datatypes.JSONMap),
 		}
 
 		if food.Name == "" {
@@ -263,7 +265,7 @@ func seedVFADish(db *gorm.DB, path string) error {
 				food.ProteinPer100g = amount
 			case strings.Contains(nName, "lipid") || strings.Contains(nName, "fat"):
 				food.FatPer100g = amount
-			case strings.Contains(nName, "carbohydrate"):
+			case strings.Contains(nName, "carbohydrate") || strings.Contains(nName, "glucid"):
 				food.CarbsPer100g = amount
 			default:
 				food.Micronutrients[nut.NameEn] = fmt.Sprintf("%f %s", amount, nut.Unit)
@@ -299,6 +301,7 @@ func normalizeKnownVFADishServing(food *domain.Food, code string) {
 	food.CarbsPer100g *= factor
 	food.FatPer100g *= factor
 	food.ServingSize = fmt.Sprintf("%.0fg", servingGrams)
+	food.IsPortionNormalized = true
 }
 
 // -------------------------------------------------------------------------
@@ -325,13 +328,14 @@ func seedUSDA(db *gorm.DB, path string) error {
 		}
 
 		food := domain.Food{
-			Code:           fmt.Sprintf("USDA-%d", dto.FDCId),
-			Name:           dto.Description,
-			NameEn:         dto.Description,
-			Category:       dto.DataType,
-			Source:         "USDA",
-			IsVerified:     true,
-			Micronutrients: make(datatypes.JSONMap),
+			Code:                fmt.Sprintf("USDA-%d", dto.FDCId),
+			Name:                dto.Description,
+			NameEn:              dto.Description,
+			Category:            dto.DataType,
+			Source:              "USDA",
+			IsVerified:          true,
+			IsPortionNormalized: true, // USDA nutrition facts are genuinely per-100g
+			Micronutrients:      make(datatypes.JSONMap),
 		}
 
 		for _, nut := range dto.FoodNutrients {
@@ -345,7 +349,7 @@ func seedUSDA(db *gorm.DB, path string) error {
 				food.ProteinPer100g = nut.Amount
 			case strings.Contains(nName, "lipid") || strings.Contains(nName, "fat"):
 				food.FatPer100g = nut.Amount
-			case strings.Contains(nName, "carbohydrate"):
+			case strings.Contains(nName, "carbohydrate") || strings.Contains(nName, "glucid"):
 				food.CarbsPer100g = nut.Amount
 			default:
 				food.Micronutrients[nut.Name] = fmt.Sprintf("%f %s", nut.Amount, nut.UnitName)

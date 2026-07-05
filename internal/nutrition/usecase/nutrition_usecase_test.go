@@ -263,6 +263,90 @@ func TestAnalyzeMeal_LocalEnrichmentRejectsVegetarianPhoBo(t *testing.T) {
 	}
 }
 
+// mockKgPort embeds the interface so only AnalyzeMeal needs implementing;
+// any other method call would panic (nil embedded value), which is fine —
+// these tests never exercise them.
+type mockKgPort struct {
+	domain.NutritionIntelligencePort
+	analyzeMealResp *domain.AnalyzeMealResponse
+	analyzeMealErr  error
+	lastReq         *domain.AnalyzeMealRequest
+}
+
+func (m *mockKgPort) AnalyzeMeal(ctx context.Context, req *domain.AnalyzeMealRequest) (*domain.AnalyzeMealResponse, error) {
+	m.lastReq = req
+	return m.analyzeMealResp, m.analyzeMealErr
+}
+
+// TestAnalyzeMeal_RealEnrichmentSurvivesCatalogFallback verifies the priority
+// fix from Phase B4: once the AI_server gRPC call returns a real, LLM-derived
+// enrichment, it must NOT be overwritten by analyzeMealFromCatalog()'s
+// hardcoded switch-case — that fallback is for when gRPC has nothing to say
+// about enrichment, not a competing "always wins" source.
+func TestAnalyzeMeal_RealEnrichmentSurvivesCatalogFallback(t *testing.T) {
+	ctx := context.Background()
+	userID := uuid.New()
+	foodID := uuid.New()
+	nutriRepo := &mockNutritionRepo{
+		foodsByID: map[uuid.UUID]domain.Food{
+			foodID: {
+				ID:     foodID,
+				Name:   "Green rice sweet dessert",
+				NameVi: "Che com",
+				Source: "VFA_DISH",
+			},
+		},
+	}
+	userRepo := &mockUserRepo{user: &domain.User{TDEE: 2000}}
+	kgPort := &mockKgPort{
+		analyzeMealResp: &domain.AnalyzeMealResponse{
+			Status: "APPROVED",
+			Safe:   true,
+			Enrichment: &domain.MealEnrichment{
+				DishName:              "Che com",
+				EstimatedTotalWeightG: 474,
+				Source:                "llm",
+				Confidence:            0.9,
+				Ingredients: []domain.MealIngredientEstimate{
+					{Name: "young green rice", WeightG: 200},
+				},
+			},
+		},
+	}
+	uc := usecase.NewNutritionUseCase(nutriRepo, nil, nil, nil, &mockWorkoutRepo{}, userRepo, nil, kgPort, nil)
+
+	resp, err := uc.AnalyzeMeal(ctx, userID, &domain.AnalyzeMealRequest{
+		Candidate: domain.CandidateMeal{
+			MealID:   "manual-lunch",
+			FoodIDs:  []string{foodID.String()},
+			MealType: "lunch",
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if resp.Enrichment == nil {
+		t.Fatalf("expected enrichment in response")
+	}
+	if resp.Enrichment.Source != "llm" {
+		t.Fatalf("expected real LLM enrichment (source=llm) to survive, got source=%q dish=%q weight=%v",
+			resp.Enrichment.Source, resp.Enrichment.DishName, resp.Enrichment.EstimatedTotalWeightG)
+	}
+	if resp.Enrichment.EstimatedTotalWeightG != 474 {
+		t.Fatalf("expected the gRPC-provided weight (474g) not the catalog fallback's, got %v",
+			resp.Enrichment.EstimatedTotalWeightG)
+	}
+
+	// FoodRefs must be resolved from Postgres before the gRPC call, so
+	// AI_server has a real dish name to enrich with instead of a bare UUID.
+	if kgPort.lastReq == nil || len(kgPort.lastReq.Candidate.FoodRefs) != 1 {
+		t.Fatalf("expected FoodRefs populated before the gRPC call, got %+v", kgPort.lastReq)
+	}
+	if kgPort.lastReq.Candidate.FoodRefs[0].Name != "Green rice sweet dessert" {
+		t.Fatalf("expected resolved food name in FoodRefs, got %+v", kgPort.lastReq.Candidate.FoodRefs[0])
+	}
+}
+
 // TestGetWeeklyAnalytics_ExactlySevenPoints verifies that the response always
 // contains exactly 7 DayAnalytics entries even when the DB has no data.
 func TestGetWeeklyAnalytics_ExactlySevenPoints(t *testing.T) {

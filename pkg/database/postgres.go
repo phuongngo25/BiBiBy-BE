@@ -143,6 +143,21 @@ func RunMigrations(db *gorm.DB) error {
 		return err
 	}
 
+	log.Println("[Migrations] Running explicit migration: 006_add_is_portion_normalized.sql")
+	migPath6, err := findMigrationFile("migrations/006_add_is_portion_normalized.sql")
+	if err != nil {
+		return err
+	}
+	migration006, err := os.ReadFile(migPath6)
+	if err != nil {
+		return err
+	}
+	if err := db.Exec(string(migration006)).Error; err != nil {
+		return err
+	}
+
+	backfillGlucidCarbs(db)
+
 	return db.AutoMigrate(
 		&domain.User{},
 		&domain.UserPortfolio{},
@@ -255,14 +270,15 @@ func loadVFAFoods(path string) []domain.Food {
 	foods := make([]domain.Food, 0, len(items))
 	for _, item := range items {
 		food := domain.Food{
-			Code:        nonEmpty("vfa_food_"+item.Code, "vfa_food_"+slug(item.NameEN)),
-			Name:        nonEmpty(item.NameEN, item.NameVI),
-			NameVi:      item.NameVI,
-			NameEn:      nonEmpty(item.NameEN, item.NameVI),
-			Category:    item.Category,
-			Source:      "VFA",
-			ServingSize: "100g",
-			IsVerified:  true,
+			Code:                nonEmpty("vfa_food_"+item.Code, "vfa_food_"+slug(item.NameEN)),
+			Name:                nonEmpty(item.NameEN, item.NameVI),
+			NameVi:              item.NameVI,
+			NameEn:              nonEmpty(item.NameEN, item.NameVI),
+			Category:            item.Category,
+			Source:              "VFA",
+			ServingSize:         "100g",
+			IsVerified:          true,
+			IsPortionNormalized: true, // plain ingredient, genuine per-100g data
 		}
 		for _, n := range item.Nutrition {
 			applyNutrient(&food, n.NameEn, n.Value)
@@ -294,14 +310,15 @@ func loadVFADishes(path string) []domain.Food {
 	foods := make([]domain.Food, 0, len(items))
 	for _, item := range items {
 		food := domain.Food{
-			Code:        nonEmpty("vfa_dish_"+item.Code, "vfa_dish_"+slug(item.NameEN)),
-			Name:        nonEmpty(item.NameEN, item.NameVI),
-			NameVi:      item.NameVI,
-			NameEn:      nonEmpty(item.NameEN, item.NameVI),
-			Category:    "Dish",
-			Source:      "VFA_DISH",
-			ServingSize: "100g",
-			IsVerified:  true,
+			Code:                nonEmpty("vfa_dish_"+item.Code, "vfa_dish_"+slug(item.NameEN)),
+			Name:                nonEmpty(item.NameEN, item.NameVI),
+			NameVi:              item.NameVI,
+			NameEn:              nonEmpty(item.NameEN, item.NameVI),
+			Category:            "Dish",
+			Source:              "VFA_DISH",
+			ServingSize:         "100g",
+			IsVerified:          true,
+			IsPortionNormalized: false, // flipped to true below for curated dishes
 		}
 		for _, n := range item.NutritionalComponents {
 			applyNutrient(&food, n.NameEn, parseFloat(n.Amount))
@@ -329,6 +346,69 @@ func normalizeKnownVFADishServing(food *domain.Food, code string) {
 	food.CarbsPer100g *= factor
 	food.FatPer100g *= factor
 	food.ServingSize = fmt.Sprintf("%.0fg", servingGrams)
+	food.IsPortionNormalized = true
+}
+
+// backfillGlucidCarbs corrects carbs_per_100g for VFA_DISH foods seeded
+// before "Glucid" was recognized as a carbohydrate synonym in applyNutrient
+// (the VFA dish dataset uses this term for ~30% of entries; seeder.go has a
+// parallel inline switch with the same fix). Only touches rows still at the
+// zero-value default, so it's safe to run on every boot regardless of which
+// seeding path (this file's DoNothing-on-conflict upsert, or
+// internal/nutrition/seeder's self-healing upsert) originally populated them.
+func backfillGlucidCarbs(db *gorm.DB) {
+	type component struct {
+		NameEn string `json:"nameEn"`
+		Amount any    `json:"amount"`
+	}
+	type item struct {
+		Code                  string      `json:"code"`
+		NutritionalComponents []component `json:"nutritional_components"`
+	}
+
+	var items []item
+	if !readJSON("vfa_dishes_db.json", &items) {
+		return
+	}
+
+	// These two codes get their carbs from migration 005's manual
+	// dish-total/6.5 calculation, not this raw JSON — never touch them here.
+	skipCodes := map[string]bool{
+		"HAN-112002": true,
+		"SFF-112002": true,
+	}
+
+	fixed := 0
+	for _, it := range items {
+		if skipCodes[strings.ToUpper(strings.TrimSpace(it.Code))] {
+			continue
+		}
+		var carbs float64
+		for _, c := range it.NutritionalComponents {
+			if strings.Contains(strings.ToLower(c.NameEn), "glucid") {
+				carbs = parseFloat(c.Amount)
+				break
+			}
+		}
+		if carbs <= 0 {
+			continue
+		}
+		// Both seeding paths derive a "vfa_dish_" or "DISH-" prefixed code from
+		// the same item.Code — try both since the two pipelines diverged.
+		for _, code := range []string{"vfa_dish_" + it.Code, "DISH-" + it.Code} {
+			result := db.Model(&domain.Food{}).
+				Where("code = ? AND source = ? AND carbs_per_100g = 0", code, "VFA_DISH").
+				Update("carbs_per_100g", carbs)
+			if result.Error != nil {
+				log.Printf("[Backfill] failed to fix carbs for %s: %v", code, result.Error)
+				continue
+			}
+			fixed += int(result.RowsAffected)
+		}
+	}
+	if fixed > 0 {
+		log.Printf("[Backfill] corrected carbs_per_100g (glucid mapping) for %d foods", fixed)
+	}
 }
 
 func parseFloat(value any) float64 {
@@ -364,13 +444,14 @@ func loadUSDAFoods(path string) []domain.Food {
 	foods := make([]domain.Food, 0, len(items))
 	for _, item := range items {
 		food := domain.Food{
-			Code:        fmt.Sprintf("usda_%d", item.FDCID),
-			Name:        item.Description,
-			NameEn:      item.Description,
-			Category:    item.DataType,
-			Source:      "USDA",
-			ServingSize: "100g",
-			IsVerified:  true,
+			Code:                fmt.Sprintf("usda_%d", item.FDCID),
+			Name:                item.Description,
+			NameEn:              item.Description,
+			Category:            item.DataType,
+			Source:              "USDA",
+			ServingSize:         "100g",
+			IsVerified:          true,
+			IsPortionNormalized: true, // USDA nutrition facts are genuinely per-100g
 		}
 		for _, n := range item.FoodNutrients {
 			applyNutrient(&food, n.Name, n.Amount)
@@ -402,7 +483,7 @@ func applyNutrient(food *domain.Food, name string, value float64) {
 		food.CaloriesPer100g = value
 	case strings.Contains(n, "protein"):
 		food.ProteinPer100g = value
-	case strings.Contains(n, "carbohydrate") || strings.Contains(n, "carb"):
+	case strings.Contains(n, "carbohydrate") || strings.Contains(n, "carb") || strings.Contains(n, "glucid"):
 		food.CarbsPer100g = value
 	case strings.Contains(n, "lipid") || strings.Contains(n, "fat"):
 		food.FatPer100g = value

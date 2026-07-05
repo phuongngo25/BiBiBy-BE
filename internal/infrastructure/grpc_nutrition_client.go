@@ -169,6 +169,11 @@ func (g *grpcNutritionClient) AnalyzeMeal(ctx context.Context, req *domain.Analy
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
+	foodRefs := make([]*pb.FoodRef, len(req.Candidate.FoodRefs))
+	for i, ref := range req.Candidate.FoodRefs {
+		foodRefs[i] = &pb.FoodRef{FoodId: ref.FoodID, Name: ref.Name, NameVi: ref.NameVi}
+	}
+
 	resp, err := g.client.AnalyzeMeal(reqCtx, &pb.AnalyzeMealRequest{
 		Meta: &commonpb.RequestMeta{RequestId: generateRequestID()},
 		Candidate: &pb.CandidateMeal{
@@ -178,6 +183,7 @@ func (g *grpcNutritionClient) AnalyzeMeal(ctx context.Context, req *domain.Analy
 			Ingredients:    req.Candidate.Ingredients,
 			Categories:     req.Candidate.Categories,
 			ProteinSources: req.Candidate.ProteinSources,
+			FoodRefs:       foodRefs,
 		},
 	})
 	if err != nil {
@@ -226,11 +232,30 @@ func (g *grpcNutritionClient) AnalyzeMeal(ctx context.Context, req *domain.Analy
 		}
 	}
 
+	var enrichment *domain.MealEnrichment
+	if resp.Enrichment != nil {
+		ingredients := make([]domain.MealIngredientEstimate, len(resp.Enrichment.Ingredients))
+		for i, ing := range resp.Enrichment.Ingredients {
+			ingredients[i] = domain.MealIngredientEstimate{
+				Name:    ing.Name,
+				WeightG: ing.AmountG,
+			}
+		}
+		enrichment = &domain.MealEnrichment{
+			DishName:              resp.Enrichment.DishName,
+			EstimatedTotalWeightG: resp.Enrichment.EstimatedServingSizeG,
+			Ingredients:           ingredients,
+			Source:                resp.Enrichment.Source,
+			Confidence:            resp.Enrichment.Confidence,
+		}
+	}
+
 	return &domain.AnalyzeMealResponse{
 		Status:     resp.Status.String(),
 		Score:      score,
 		Violations: violations,
 		Fixes:      fixes,
+		Enrichment: enrichment,
 	}, nil
 }
 

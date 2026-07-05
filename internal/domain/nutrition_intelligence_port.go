@@ -191,6 +191,17 @@ type CandidateMeal struct {
 	Ingredients    []string `json:"ingredients"`
 	Categories     []string `json:"categories"`
 	ProteinSources []string `json:"protein_sources"`
+	// FoodRefs carries resolved names for LLM enrichment prompts — AI_server
+	// has no Postgres `foods` catalog of its own, so Go (which already has
+	// this loaded to build FoodIDs) passes names through here. Populated by
+	// AnalyzeMeal() usecase before the gRPC call, not by request callers.
+	FoodRefs []FoodRef `json:"food_refs,omitempty"`
+}
+
+type FoodRef struct {
+	FoodID string `json:"food_id"`
+	Name   string `json:"name"`
+	NameVi string `json:"name_vi"`
 }
 
 type AnalyzeMealRequest struct {
