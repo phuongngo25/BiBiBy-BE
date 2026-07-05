@@ -278,6 +278,12 @@ services:
       TZ: ${TZ:-Asia/Ho_Chi_Minh}
     ports:
       - "20241:20241"
+    # The tunnel's ingress rule (configured on the Cloudflare dashboard) points
+    # to http://host.docker.internal:8090 (the edge nginx on the host). Docker
+    # Desktop (Mac/Windows) resolves that name for free; native Linux Docker
+    # does not, so cloudflared fails DNS lookup unless this is added explicitly.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       go-backend:
         condition: service_healthy
