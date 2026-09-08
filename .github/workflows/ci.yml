@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main, deploy, dev]
+  pull_request:
+    branches: [main, deploy]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      GOWORK: off
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -count=1 -race ./...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v1.64.8
+
+      - name: Validate compose configs
+        run: |
+          docker compose -f docker-compose.yml config --quiet
+          docker compose -f docker-compose.prod.yml config --quiet
+          docker compose -f docker-compose.edge.yml config --quiet
+          docker compose -f docker-compose.monitoring.yml config --quiet
+          docker compose -f docker-compose.spark.yml config --quiet
