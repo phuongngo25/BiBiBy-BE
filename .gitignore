@@ -117,6 +117,7 @@ lib/generated_plugin_registrant.dart
 *.cgi
 *.com
 *.exe
+*.exe~
 *.gadget
 *.jar
 *.pif
