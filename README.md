@@ -56,14 +56,30 @@ docker compose -f docker-compose.yml up -d
 
 ### Development (`.env.example`)
 
+Key development variables:
+- `PORT` — Server port (default: 8080)
+- `DB_DSN` — PostgreSQL connection string
+- `REDIS_URL` — Redis connection string
+- `JWT_SECRET` — JWT signing secret
+
+Full list: see `.env.example`.
+
 ### Production (`.env.server.example`)
 
-Crash-critical variables that must be configured:
-- `ENCRYPTION_KEYS` — User data encryption
+Key production variables:
+- `PORT` — Server port
+- `DB_DSN` — PostgreSQL connection string
+- `REDIS_URL` — Redis connection string
+- `JWT_SECRET` — JWT signing secret
 - `GRPC_AI_HOST` — AI server hostname
 - `GRPC_AI_PORT` — AI server gRPC port
 
-See `.env.example` and `.env.server.example` for the full variable list.
+Full list: see `.env.server.example`.
+
+**Crash-critical variables that must be configured:**
+- `ENCRYPTION_KEYS` — User data encryption
+- `GRPC_AI_HOST` — AI server hostname
+- `GRPC_AI_PORT` — AI server gRPC port
 
 **Note:** AI server-only variables (`GEMINI_API_KEY`, `OPENAI_API_KEY`) are not part of go_backend's environment contract.
 
@@ -124,7 +140,7 @@ go_backend/
 |-- cmd/           # Entry points
 |-- internal/      # Private packages
 |   |-- domain/    # Domain entities
-|   |-- nutrition/  # Nutrition use cases
+|   |-- nutrition/ # Nutrition use cases
 |   |-- user/      # User management
 |   |-- product/   # Product catalog
 |   |-- workout/   # Workout tracking
