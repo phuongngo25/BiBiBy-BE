@@ -146,8 +146,8 @@ services:
 
   ai-cv:
     build:
-      context: ../AI_server/Computer_Vision
-      dockerfile: Dockerfile
+      context: ../AI_server
+      dockerfile: Computer_Vision/Dockerfile
     restart: unless-stopped
     # Expose the host NVIDIA GPU to the container so the CV model runs on CUDA.
     # Requires the NVIDIA driver on the host + GPU support in Docker (WSL2).
