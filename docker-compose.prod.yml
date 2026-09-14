@@ -128,6 +128,21 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      # Phase 7 (07-03): local Ollama sidecar fallback, opt-in and off by
+      # default. Fires only when the external provider (OpenAI/Gemini)
+      # raises -- when disabled, this is zero code-path change (MD-05,
+      # P7-I3). Deliberately NO depends_on edge from ai-kg to the `ollama`
+      # service below: a `condition: service_healthy` edge would make ai-kg
+      # refuse to start whenever the sidecar is unhealthy or absent, the
+      # exact opposite of "disabled means unchanged" and of P7-I4 ("a
+      # local-model failure must not crash the primary service"). The
+      # client is constructed lazily (07-02), so no startup ordering
+      # relationship needs to be expressed here.
+      NUTRIX_LOCAL_LLM_ENABLED: ${NUTRIX_LOCAL_LLM_ENABLED:-false}
+      NUTRIX_LOCAL_LLM_ENDPOINT: ${NUTRIX_LOCAL_LLM_ENDPOINT:-http://ollama:11434}
+      NUTRIX_LOCAL_LLM_MODEL: ${NUTRIX_LOCAL_LLM_MODEL:-qwen2.5:7b}
+      NUTRIX_LOCAL_LLM_TIMEOUT: ${NUTRIX_LOCAL_LLM_TIMEOUT:-30}
+      NUTRIX_LOCAL_LLM_MAX_TOKENS: ${NUTRIX_LOCAL_LLM_MAX_TOKENS:-2000}
     ports:
       - "${GRPC_AI_PORT:-50051}:50051"
     depends_on:
@@ -197,6 +212,71 @@ services:
       timeout: 10s
       retries: 30
       start_period: 60s
+    networks:
+      - nutrix
+
+  # Phase 7 (07-03): local Ollama inference sidecar, gated behind the
+  # `local-llm` compose profile so `docker compose --profile local-llm up`
+  # is required to create it at all -- with no profile requested, this
+  # service does not exist, which is the deployment-layer half of MD-05's
+  # "when disabled, zero change" (P7-I3, P7-I4).
+  ollama:
+    image: ollama/ollama:0.34.0 # pinned tag, never `latest` (T-07-SC, P-08)
+    restart: unless-stopped
+    profiles: ["local-llm"]
+    # Ollama the *binary* supports CPU-only inference when no GPU is
+    # available -- that is a fact about Ollama itself, unaffected by this
+    # Compose config. Whether THIS Compose service (which declares an
+    # NVIDIA device reservation, copied verbatim from ai-cv above) also
+    # starts cleanly on a host with no NVIDIA Container Toolkit/runtime
+    # registered is a separate, Docker-Compose-scheduling question -- NOT
+    # an Ollama question -- and is UNVERIFIED from YAML alone (D-08
+    # clarification, 2026-09-14): `docker compose up` can fail at the
+    # container-runtime layer ("could not select device driver with
+    # capabilities: [[gpu]]") before Ollama ever gets a chance to fall back
+    # to CPU. This is confirmed for real, on the actual target host, only
+    # by the 07-03 Task 3 checkpoint -- do not treat CPU-host startup as
+    # proven until that checkpoint says so.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - nutrix_ollama_models:/root/.ollama
+    # See AI_server/docker-compose.yml for why `ollama list` is used
+    # instead of a curl/wget-based healthcheck (the official image ships
+    # neither -- github.com/ollama/ollama issue #9781).
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+    # Deliberately NO ports block. Ollama's API has no authentication, so
+    # anyone who can reach port 11434 could enumerate, pull, and run
+    # arbitrary models on the host GPU. This is the single most important
+    # line (or rather, absent line) of YAML in this service definition
+    # (T-07-04, ASVS V4) -- reachable only from inside the `nutrix` bridge
+    # network.
+    networks:
+      - nutrix
+
+  ollama-pull:
+    image: ollama/ollama:0.34.0
+    restart: "no"
+    profiles: ["local-llm"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    # D-02: the model is fetched at runtime, never committed to either
+    # repository. The healthcheck above only proves the API answers, not
+    # that any model is resident (RESEARCH Assumption A-4) -- this is why
+    # the pull is a separate gated step rather than something the
+    # healthcheck is trusted to imply.
+    entrypoint: ["sh", "-c", "OLLAMA_HOST=http://ollama:11434 ollama pull ${NUTRIX_LOCAL_LLM_MODEL:-qwen2.5:7b}"]
     networks:
       - nutrix
 
@@ -301,3 +381,4 @@ volumes:
   nutrix_ai_postgres_data:
   nutrix_neo4j_data:
   nutrix_neo4j_logs:
+  nutrix_ollama_models:
