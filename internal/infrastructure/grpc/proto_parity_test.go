@@ -51,6 +51,9 @@ func TestProtoParityGate(t *testing.T) {
 	if _, err := os.Stat(aiServerProtoDir); os.IsNotExist(err) {
 		t.Skipf("AI_server proto dir %s does not exist, skipping parity check. (Expected in local dev or CI)", aiServerProtoDir)
 	}
+	if _, err := os.Stat(contractsProtoDir); os.IsNotExist(err) {
+		t.Skipf("nutrix-contracts proto dir %s does not exist, skipping parity check. (Expected in local dev or CI)", contractsProtoDir)
+	}
 
 	protosToCheck := []string{"nutrition_intelligence.proto", "common.proto"}
 

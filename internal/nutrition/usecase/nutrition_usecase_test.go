@@ -439,8 +439,12 @@ func TestGetWeeklyAnalytics_SumsCorrect(t *testing.T) {
 	ctx := context.Background()
 	userID := uuid.New()
 
-	today := time.Now().Format("2006-01-02")
-	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	// GetWeeklyAnalytics defaults to UTC when the user has no configured
+	// timezone. Pin the fixture keys to that same clock so this test remains
+	// deterministic around local-midnight/UTC-day boundaries.
+	nowUTC := time.Now().UTC()
+	today := nowUTC.Format("2006-01-02")
+	yesterday := nowUTC.AddDate(0, 0, -1).Format("2006-01-02")
 
 	nutriRepo := &mockNutritionRepo{
 		weeklyConsumed: map[string]float64{

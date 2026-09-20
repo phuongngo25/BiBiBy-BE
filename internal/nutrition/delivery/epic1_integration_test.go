@@ -110,7 +110,7 @@ func (m *mockKGMock) AnalyzeMeal(ctx context.Context, req *domain.AnalyzeMealReq
 func (m *mockKGMock) Close() error { return nil }
 
 // setupRouter sets up the gin router with mocked dependencies
-func setupRouter(kg *mockKGMock, userRepo *mockUserRepository) (*gin.Engine, *mockKGMock, *mockUserRepository) {
+func setupRouterWithNutritionRepo(kg *mockKGMock, userRepo *mockUserRepository, nutritionRepo domain.NutritionRepository) (*gin.Engine, *mockKGMock, *mockUserRepository) {
 	gin.SetMode(gin.TestMode)
 	r := gin.Default()
 
@@ -122,11 +122,27 @@ func setupRouter(kg *mockKGMock, userRepo *mockUserRepository) (*gin.Engine, *mo
 	})
 
 	// Only pass the required mocks. Other repos can be nil for Epic 1 APIs.
-	uc := usecase.NewNutritionUseCase(nil, nil, nil, nil, nil, userRepo, nil, kg, nil)
+	uc := usecase.NewNutritionUseCase(nutritionRepo, nil, nil, nil, nil, userRepo, nil, kg, nil)
 
 	rg := r.Group("/api/v1")
 	delivery.NewNutritionHandler(rg, uc)
 	return r, kg, userRepo
+}
+
+func setupRouter(kg *mockKGMock, userRepo *mockUserRepository) (*gin.Engine, *mockKGMock, *mockUserRepository) {
+	return setupRouterWithNutritionRepo(kg, userRepo, nil)
+}
+
+// swapNutritionRepo supplies only the candidate lookup exercised by the
+// reoptimization integration test. Embedding the interface keeps unrelated
+// repository methods outside this focused fixture.
+type swapNutritionRepo struct {
+	domain.NutritionRepository
+	foods []domain.Food
+}
+
+func (m *swapNutritionRepo) GetRandomFoods(context.Context, int) ([]domain.Food, error) {
+	return m.foods, nil
 }
 
 func TestEpic1A_Thresholds(t *testing.T) {
@@ -575,7 +591,12 @@ func TestEpic1C_PlannerReoptimize(t *testing.T) {
 	t.Run("C2.5-A: Locality Preservation", func(t *testing.T) {
 		kg := new(mockKGMock)
 		userRepo := new(mockUserRepository)
-		router, _, _ := setupRouter(kg, userRepo)
+		candidateID := uuid.New()
+		nutritionRepo := &swapNutritionRepo{foods: []domain.Food{{
+			ID: candidateID, Name: "HealthyWrap", CaloriesPer100g: 250,
+		}}}
+		router, _, _ := setupRouterWithNutritionRepo(kg, userRepo, nutritionRepo)
+		userRepo.On("GetByID", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return((*domain.User)(nil), nil)
 
 		// Create a mock 7-day plan (we just test Monday & Tuesday to represent the whole week)
 		initialMeals := []domain.PlannedMealDTO{
@@ -595,7 +616,7 @@ func TestEpic1C_PlannerReoptimize(t *testing.T) {
 
 		// Mock AnalyzeMeal for the replacement food
 		kg.On("AnalyzeMeal", mock.Anything, mock.MatchedBy(func(req *domain.AnalyzeMealRequest) bool {
-			return len(req.Candidate.FoodIDs) > 0 && req.Candidate.FoodIDs[0] == "HealthyWrap"
+			return len(req.Candidate.FoodIDs) > 0 && req.Candidate.FoodIDs[0] == candidateID.String()
 		})).Return(&domain.AnalyzeMealResponse{
 			Status: "APPROVED",
 		}, nil)
@@ -638,7 +659,8 @@ func TestEpic1C_PlannerReoptimize(t *testing.T) {
 		// Tuesday lunch CHANGED
 		assert.Equal(t, "Tuesday", resp.Meals[4].Date)
 		assert.Equal(t, "lunch", resp.Meals[4].MealType)
-		assert.Equal(t, "HealthyWrap", resp.Meals[4].FoodIDs[0], "Tuesday Lunch should be swapped")
+		assert.Equal(t, candidateID.String(), resp.Meals[4].FoodIDs[0], "Tuesday Lunch should be swapped")
+		assert.Equal(t, "HealthyWrap", resp.Meals[4].FoodName)
 		assert.Equal(t, "APPROVED", resp.Meals[4].Status)
 
 		// Tuesday dinner unchanged
