@@ -196,6 +196,10 @@ type CandidateMeal struct {
 	// this loaded to build FoodIDs) passes names through here. Populated by
 	// AnalyzeMeal() usecase before the gRPC call, not by request callers.
 	FoodRefs []FoodRef `json:"food_refs,omitempty"`
+	// FoodMasses carries per-food mass inputs from the client, each source in
+	// its own optional field (Phase 10 D-02). Passed through to AI_server
+	// as-is; see FoodMassInput.
+	FoodMasses []FoodMassInput `json:"food_masses,omitempty"`
 	// DailyIntake carries today's logged items for the JWT user so AI_server
 	// can evaluate the remaining daily nutrient budget (Phase 10 D-01/D-13).
 	// Populated by the AnalyzeMeal usecase from the user's food_logs; never
@@ -203,6 +207,37 @@ type CandidateMeal struct {
 	// understate intake (Phase 10 RESEARCH Security V4 / Pitfall 2).
 	// nil means "not sent" (the planner path): AI_server reads it as absent.
 	DailyIntake *DailyIntakeContext `json:"-"`
+}
+
+// FoodMassInput is the mass known for one food, by source. Each source stays
+// in its own field and they are never merged into one untagged number
+// (Phase 10 D-02). ActualMassSource accepts "cv_estimated" or "measured"
+// only; anything else is sent as unspecified and AI_server ignores the actual
+// slot. Whether a mass may justify REJECTED is decided by AI_server alone
+// (D-08, D-10, D-12), so there is deliberately no authority field here.
+//
+// Go does not validate or reject mass values: AI_server treats non-finite,
+// non-positive or over-5000 g values as absent, and a 400 on these new
+// optional fields would change the endpoint's behavior for existing clients.
+type FoodMassInput struct {
+	FoodID            string   `json:"food_id"`
+	ActualMassG       *float64 `json:"actual_mass_g,omitempty"`
+	ActualMassSource  string   `json:"actual_mass_source,omitempty"` // cv_estimated | measured
+	UserEnteredMassG  *float64 `json:"user_entered_mass_g,omitempty"`
+	EstimatedServingG *float64 `json:"estimated_serving_g,omitempty"`
+}
+
+// MassResolution reports which mass AI_server used for a food and whether it
+// had decision authority (Phase 10 D-08). Response-only.
+type MassResolution struct {
+	FoodID                  string   `json:"food_id"`
+	MassG                   *float64 `json:"mass_g,omitempty"`
+	MassSource              string   `json:"mass_source"` // cv_estimated | user_entered | estimated_serving | measured | ""
+	HC04Approved            bool     `json:"hc04_approved"`
+	DecisionAuthority       bool     `json:"decision_authority"`
+	AuthoritativeMassG      *float64 `json:"authoritative_mass_g,omitempty"`
+	AuthoritativeMassSource string   `json:"authoritative_mass_source"`
+	Note                    string   `json:"note,omitempty"`
 }
 
 // ConsumedFoodItem is one food already logged today. QuantityG nil means the
@@ -312,7 +347,8 @@ type AnalyzeMealResponse struct {
 	Enrichment       *MealEnrichment     `json:"enrichment,omitempty"`
 	Fixes            []MealFixSuggestion `json:"fixes"`
 	SafeAlternatives []MealFixSuggestion `json:"safeAlternatives"`
-	// NutrientResults is omitted when AI_server sent none, so pre-Phase-10
-	// responses keep their exact JSON shape.
+	// NutrientResults and MassResolutions are omitted when AI_server sent
+	// none, so pre-Phase-10 responses keep their exact JSON shape.
 	NutrientResults []NutrientThresholdResult `json:"nutrientResults,omitempty"`
+	MassResolutions []MassResolution          `json:"massResolutions,omitempty"`
 }

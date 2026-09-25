@@ -237,3 +237,66 @@ func TestAnalyzeMealThresholdWire_UnsetIntakeStaysUnset(t *testing.T) {
 		t.Fatalf("expected unset daily intake on the planner path, got %+v", intake)
 	}
 }
+
+// TestAnalyzeMealThresholdWire_FoodMassesSeparate: REST food_masses reach
+// AI_server as separate optional fields, and mass provenance comes back with
+// the authority flags AI_server computed (D-02, D-08).
+func TestAnalyzeMealThresholdWire_FoodMassesSeparate(t *testing.T) {
+	repo := &mockNutritionRepo{}
+	fake := &fakeIntelligenceServer{}
+	uc, foodID := thresholdWireFixture(t, repo, fake)
+	fake.resp = &pb.AnalyzeMealResponse{
+		Status: pb.MealApprovalStatus_APPROVED,
+		MassResolutions: []*pb.MassResolution{{
+			FoodId:                  foodID.String(),
+			MassG:                   f64(180),
+			MassSource:              pb.MassSource_MASS_SOURCE_CV_ESTIMATED,
+			Hc04Approved:            false,
+			DecisionAuthority:       false,
+			AuthoritativeMassG:      f64(400),
+			AuthoritativeMassSource: pb.MassSource_MASS_SOURCE_USER_ENTERED,
+		}},
+	}
+
+	resp, err := uc.AnalyzeMeal(context.Background(), uuid.New(), &domain.AnalyzeMealRequest{
+		Candidate: domain.CandidateMeal{
+			MealID:  "m",
+			FoodIDs: []string{foodID.String()},
+			FoodMasses: []domain.FoodMassInput{{
+				FoodID:           foodID.String(),
+				UserEnteredMassG: f64(400),
+				ActualMassG:      f64(180),
+				ActualMassSource: "cv_estimated",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AnalyzeMeal: %v", err)
+	}
+
+	masses := fake.received(t).GetCandidate().GetFoodMasses()
+	if len(masses) != 1 {
+		t.Fatalf("expected one food mass on the wire, got %+v", masses)
+	}
+	m := masses[0]
+	if m.GetUserEnteredMassG() != 400 || m.GetActualMassG() != 180 {
+		t.Fatalf("expected user_entered 400 / actual 180, got %v / %v", m.GetUserEnteredMassG(), m.GetActualMassG())
+	}
+	if m.ActualMassSource != pb.MassSource_MASS_SOURCE_CV_ESTIMATED {
+		t.Fatalf("expected MASS_SOURCE_CV_ESTIMATED, got %v", m.ActualMassSource)
+	}
+	if m.EstimatedServingG != nil {
+		t.Fatalf("expected estimated_serving_g unset, got %v", *m.EstimatedServingG)
+	}
+
+	if len(resp.MassResolutions) != 1 {
+		t.Fatalf("expected mass resolutions in the usecase response, got %+v", resp.MassResolutions)
+	}
+	r := resp.MassResolutions[0]
+	if r.HC04Approved || r.DecisionAuthority {
+		t.Fatalf("expected no HC-04 approval and no decision authority, got %+v", r)
+	}
+	if r.MassSource != "cv_estimated" || r.AuthoritativeMassSource != "user_entered" {
+		t.Fatalf("unexpected mass provenance: %+v", r)
+	}
+}

@@ -199,6 +199,19 @@ func buildPbCandidateMeal(c domain.CandidateMeal) *pb.CandidateMeal {
 		FoodRefs:       foodRefs,
 	}
 
+	if len(c.FoodMasses) > 0 {
+		candidate.FoodMasses = make([]*pb.FoodMassInput, len(c.FoodMasses))
+		for i, m := range c.FoodMasses {
+			candidate.FoodMasses[i] = &pb.FoodMassInput{
+				FoodId:            m.FoodID,
+				ActualMassG:       copyFloat64Ptr(m.ActualMassG),
+				ActualMassSource:  actualMassSourceToPb(m.ActualMassSource),
+				UserEnteredMassG:  copyFloat64Ptr(m.UserEnteredMassG),
+				EstimatedServingG: copyFloat64Ptr(m.EstimatedServingG),
+			}
+		}
+	}
+
 	// nil DailyIntake (the planner path) leaves the field unset: AI_server
 	// reads "absent" as UNKNOWN consumption, never as an empty day.
 	if c.DailyIntake != nil {
@@ -312,6 +325,26 @@ func mapPbAnalyzeMealResponse(resp *pb.AnalyzeMealResponse) *domain.AnalyzeMealR
 		}
 	}
 
+	var massResolutions []domain.MassResolution
+	if len(resp.MassResolutions) > 0 {
+		massResolutions = make([]domain.MassResolution, 0, len(resp.MassResolutions))
+		for _, r := range resp.MassResolutions {
+			if r == nil {
+				continue
+			}
+			massResolutions = append(massResolutions, domain.MassResolution{
+				FoodID:                  r.FoodId,
+				MassG:                   copyFloat64Ptr(r.MassG),
+				MassSource:              massSourceFromPb(r.MassSource),
+				HC04Approved:            r.Hc04Approved,
+				DecisionAuthority:       r.DecisionAuthority,
+				AuthoritativeMassG:      copyFloat64Ptr(r.AuthoritativeMassG),
+				AuthoritativeMassSource: massSourceFromPb(r.AuthoritativeMassSource),
+				Note:                    r.Note,
+			})
+		}
+	}
+
 	return &domain.AnalyzeMealResponse{
 		Status:          resp.Status.String(),
 		Score:           score,
@@ -319,6 +352,38 @@ func mapPbAnalyzeMealResponse(resp *pb.AnalyzeMealResponse) *domain.AnalyzeMealR
 		Fixes:           fixes,
 		Enrichment:      enrichment,
 		NutrientResults: nutrientResults,
+		MassResolutions: massResolutions,
+	}
+}
+
+// actualMassSourceToPb maps the client's actual-mass label. Only CV and
+// measured are valid for the actual slot; anything else is unspecified, and
+// AI_server then ignores the actual mass.
+func actualMassSourceToPb(source string) pb.MassSource {
+	switch source {
+	case "cv_estimated":
+		return pb.MassSource_MASS_SOURCE_CV_ESTIMATED
+	case "measured":
+		return pb.MassSource_MASS_SOURCE_MEASURED
+	default:
+		return pb.MassSource_MASS_SOURCE_UNSPECIFIED
+	}
+}
+
+// massSourceFromPb maps AI_server's mass provenance to the REST label;
+// UNSPECIFIED (or an unknown value) maps to "".
+func massSourceFromPb(source pb.MassSource) string {
+	switch source {
+	case pb.MassSource_MASS_SOURCE_CV_ESTIMATED:
+		return "cv_estimated"
+	case pb.MassSource_MASS_SOURCE_USER_ENTERED:
+		return "user_entered"
+	case pb.MassSource_MASS_SOURCE_ESTIMATED_SERVING:
+		return "estimated_serving"
+	case pb.MassSource_MASS_SOURCE_MEASURED:
+		return "measured"
+	default:
+		return ""
 	}
 }
 
