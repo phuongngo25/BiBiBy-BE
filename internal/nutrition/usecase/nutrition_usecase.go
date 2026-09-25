@@ -1764,10 +1764,13 @@ func (u *nutritionUseCase) AnalyzeMeal(ctx context.Context, userID uuid.UUID, re
 	// server-side only (plan 10-04, NFR-6); any client value is overwritten.
 	medical := u.medicalContextForUser(ctx, userID)
 	req.MedicalContext = medical
+	// Go owns the user fact, and the fallback branches drop non-threshold AI
+	// findings, so the unknown-profile floor is applied last, on whichever
+	// response is returned (plan 10-04 G-04).
 
 	if u.kgPort == nil {
 		if localResp := u.analyzeMealFromCatalog(ctx, userID, req); localResp != nil {
-			return localResp, nil
+			return floorUnknownMedicalContext(localResp, medical, req.Candidate.FoodIDs), nil
 		}
 		return nil, fmt.Errorf("KG service unavailable")
 	}
@@ -1803,7 +1806,7 @@ func (u *nutritionUseCase) AnalyzeMeal(ctx context.Context, userID uuid.UUID, re
 	resp, err := u.kgPort.AnalyzeMeal(ctx, req)
 	if err != nil {
 		if localResp := u.analyzeMealFromCatalog(ctx, userID, req); localResp != nil {
-			return localResp, nil
+			return floorUnknownMedicalContext(localResp, medical, req.Candidate.FoodIDs), nil
 		}
 		return nil, err
 	}
@@ -1815,14 +1818,14 @@ func (u *nutritionUseCase) AnalyzeMeal(ctx context.Context, userID uuid.UUID, re
 			// Threshold findings are computed deterministically by AI_server
 			// independently of the KG food-safety lookup, so they stay valid
 			// when the KG part is not (Phase 10 RESEARCH Pitfall 5, D-05).
-			return preserveThresholdFindings(localResp, normalized), nil
+			return floorUnknownMedicalContext(preserveThresholdFindings(localResp, normalized), medical, req.Candidate.FoodIDs), nil
 		}
 		if normalized.Enrichment == nil {
 			normalized.Enrichment = localResp.Enrichment
 		}
 	}
 
-	return normalized, nil
+	return floorUnknownMedicalContext(normalized, medical, req.Candidate.FoodIDs), nil
 }
 
 const nutrientThresholdViolationType = "nutrient_threshold"
@@ -1950,13 +1953,86 @@ func (u *nutritionUseCase) medicalContextForUser(ctx context.Context, userID uui
 	if user == nil {
 		return &domain.UserMedicalContext{Present: false}
 	}
-	ids := make([]string, 0)
-	for _, part := range strings.Split(user.MedicalConditions, ",") {
+	ids, ok := medicalConditionIDs(user.MedicalConditions)
+	if !ok {
+		log.Printf("[AnalyzeMeal] medical profile unreadable, sending unknown: undecryptable")
+		return &domain.UserMedicalContext{Present: false}
+	}
+	return &domain.UserMedicalContext{Present: true, DiseaseIDs: ids}
+}
+
+// medicalConditionIDs parses the profile's comma-separated conditions into
+// raw trimmed entries (order kept, empty entries dropped, never nil). A value
+// containing ":" is the "<version>:<base64>" ciphertext decryptUserFields
+// leaves behind when decryption fails silently (pkg/crypto Encrypt format),
+// not a condition list, so it reports ok=false (T-10-27).
+func medicalConditionIDs(raw string) (ids []string, ok bool) {
+	value := strings.TrimSpace(raw)
+	if strings.Contains(value, ":") {
+		return nil, false
+	}
+	ids = make([]string, 0)
+	for _, part := range strings.Split(value, ",") {
 		if id := strings.TrimSpace(part); id != "" {
 			ids = append(ids, id)
 		}
 	}
-	return &domain.UserMedicalContext{Present: true, DiseaseIDs: ids}
+	return ids, true
+}
+
+const medicalContextUnknownViolationType = "medical_context_unknown"
+
+// floorUnknownMedicalContext raises a response to at least WARNING when the
+// user's medical conditions could not be read (plan 10-04 G-04), so an
+// unreadable profile never silently means "no conditions" (no
+// UNKNOWN->APPROVED). The floor is a WARNING-severity finding and stays
+// user-overridable (D-05). A readable profile (or no context) returns resp
+// unchanged; the input is never mutated.
+func floorUnknownMedicalContext(resp *domain.AnalyzeMealResponse, medical *domain.UserMedicalContext, foodIDs []string) *domain.AnalyzeMealResponse {
+	if resp == nil || medical == nil || medical.Present {
+		return resp
+	}
+
+	out := *resp
+	out.Violations = append(make([]domain.MealViolation, 0, len(resp.Violations)+1), resp.Violations...)
+	out.EvidencePath = append(make([]domain.MealEvidencePath, 0, len(resp.EvidencePath)+1), resp.EvidencePath...)
+
+	exists := false
+	for _, violation := range out.Violations {
+		if violation.ViolationType == medicalContextUnknownViolationType {
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		if len(out.EvidencePath) == 0 {
+			// Keep the evidence for existing findings, as normalization would.
+			for _, violation := range out.Violations {
+				out.EvidencePath = append(out.EvidencePath, domain.MealEvidencePath{
+					DiseaseID:       violation.ViolationType,
+					RuleDescription: violation.Description,
+					Nodes:           evidenceNodesForViolation(violation),
+				})
+			}
+		}
+		violation := domain.MealViolation{
+			ViolationType:    medicalContextUnknownViolationType,
+			Description:      "Your saved health conditions could not be read, so condition-specific limits were not checked for this meal. Review it before logging.",
+			Severity:         "WARNING",
+			OffendingFoodIDs: append([]string(nil), foodIDs...),
+		}
+		out.Violations = append(out.Violations, violation)
+		out.EvidencePath = append(out.EvidencePath, domain.MealEvidencePath{
+			DiseaseID:       violation.ViolationType,
+			RuleDescription: violation.Description,
+			Nodes:           evidenceNodesForViolation(violation),
+		})
+	}
+
+	if mealStatusRank("WARNING") > mealStatusRank(out.Status) {
+		out.Status = "WARNING"
+	}
+	return normalizeAnalyzeMealResponse(&out)
 }
 
 func (u *nutritionUseCase) analyzeMealFromCatalog(ctx context.Context, userID uuid.UUID, req *domain.AnalyzeMealRequest) *domain.AnalyzeMealResponse {

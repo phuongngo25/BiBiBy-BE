@@ -236,11 +236,13 @@ func TestMapping_NoRequestAuthorityFields(t *testing.T) {
 		reflect.TypeOf(domain.ConsumedFoodItem{}),
 		reflect.TypeOf(domain.DailyIntakeContext{}),
 		reflect.TypeOf(domain.AnalyzeMealRequest{}),
+		reflect.TypeOf(domain.UserMedicalContext{}),
 		reflect.TypeOf(pb.FoodMassInput{}),
 		reflect.TypeOf(pb.CandidateMeal{}),
 		reflect.TypeOf(pb.ConsumedFoodItem{}),
 		reflect.TypeOf(pb.DailyIntakeContext{}),
 		reflect.TypeOf(pb.AnalyzeMealRequest{}),
+		reflect.TypeOf(pb.UserMedicalContext{}),
 	}
 	seen := map[reflect.Type]bool{}
 	var walk func(reflect.Type)
@@ -268,5 +270,47 @@ func TestMapping_NoRequestAuthorityFields(t *testing.T) {
 	}
 	for _, root := range roots {
 		walk(root)
+	}
+}
+
+// clientMedicalJSON is a REST body that tries to supply its own medical
+// context, under both the snake_case and the Go field names (plan 10-04).
+const clientMedicalJSON = `{"candidate":{"meal_id":"m","food_ids":["F"],"meal_type":"lunch"},` +
+	`"medical_context":{"present":true,"disease_ids":[]},` +
+	`"MedicalContext":{"Present":true,"DiseaseIDs":[]}}`
+
+// TestMapping_JSONBindDropsClientMedicalContext (T-10-23): a client-supplied
+// medical context is never bound, so a client cannot drop its own conditions.
+func TestMapping_JSONBindDropsClientMedicalContext(t *testing.T) {
+	var req domain.AnalyzeMealRequest
+	if err := json.Unmarshal([]byte(clientMedicalJSON), &req); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if req.MedicalContext != nil {
+		t.Fatalf("client medical context must not bind, got %+v", req.MedicalContext)
+	}
+	if req.Candidate.MealID != "m" || len(req.Candidate.FoodIDs) != 1 {
+		t.Fatalf("candidate must still bind, got %+v", req.Candidate)
+	}
+}
+
+func TestMapping_MedicalContextMapping(t *testing.T) {
+	if got := buildPbMedicalContext(nil); got != nil {
+		t.Fatalf("nil must map to nil (field unset), got %+v", got)
+	}
+
+	ids := []string{"hypertension", "ckd"}
+	got := buildPbMedicalContext(&domain.UserMedicalContext{Present: true, DiseaseIDs: ids})
+	if !got.GetPresent() || !reflect.DeepEqual(got.GetDiseaseIds(), []string{"hypertension", "ckd"}) {
+		t.Fatalf("unexpected mapping %+v", got)
+	}
+	ids[0] = "mutated"
+	if got.GetDiseaseIds()[0] != "hypertension" {
+		t.Fatalf("pb ids must be a copy, got %q", got.GetDiseaseIds())
+	}
+
+	unknown := buildPbMedicalContext(&domain.UserMedicalContext{Present: false})
+	if unknown == nil || unknown.GetPresent() || len(unknown.GetDiseaseIds()) != 0 {
+		t.Fatalf("present=false must map to present=false with no ids, got %+v", unknown)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -137,6 +138,10 @@ func (m *mockWorkoutRepo) GetDailyBurnedCalories(ctx context.Context, userID uui
 
 type mockUserRepo struct {
 	user *domain.User
+	// getErr, when set, makes GetByID fail (an unreadable profile, plan 10-04).
+	getErr error
+	// nilUser makes GetByID return (nil, nil).
+	nilUser bool
 }
 
 func (m *mockUserRepo) Create(ctx context.Context, user *domain.User) error { return nil }
@@ -147,6 +152,12 @@ func (m *mockUserRepo) GetByUsername(ctx context.Context, username string) (*dom
 	return nil, nil
 }
 func (m *mockUserRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
+	if m.getErr != nil {
+		return nil, m.getErr
+	}
+	if m.nilUser {
+		return nil, nil
+	}
 	if m.user != nil {
 		return m.user, nil
 	}
@@ -688,5 +699,194 @@ func TestAIFoodRegistryCoverage(t *testing.T) {
 	expectedCount := 30
 	if len(usecase.AIFoodRegistry) != expectedCount {
 		t.Errorf("AIFoodRegistry coverage mismatch: expected %d, got %d", expectedCount, len(usecase.AIFoodRegistry))
+	}
+}
+
+// ─── Plan 10-04: fail-closed medical context ────────────────────────────────
+
+const medicalContextUnknownType = "medical_context_unknown"
+
+var errProfileUnreadable = errors.New("profile read failed")
+
+// analyzeWithUsers runs the usecase AnalyzeMeal for one food with a chosen
+// user repository and KG port (kg may be nil: no AI client wired).
+func analyzeWithUsers(t *testing.T, repo *mockNutritionRepo, users domain.UserRepository, kg domain.NutritionIntelligencePort, foodID uuid.UUID) *domain.AnalyzeMealResponse {
+	t.Helper()
+	uc := usecase.NewNutritionUseCase(repo, nil, nil, nil, &mockWorkoutRepo{}, users, nil, kg, nil)
+	resp, err := uc.AnalyzeMeal(context.Background(), uuid.New(), &domain.AnalyzeMealRequest{
+		Candidate: domain.CandidateMeal{MealID: "manual-lunch", FoodIDs: []string{foodID.String()}, MealType: "lunch"},
+	})
+	if err != nil {
+		t.Fatalf("AnalyzeMeal: %v", err)
+	}
+	return resp
+}
+
+// assertMedicalFloor checks the WARNING floor: exactly one
+// medical_context_unknown violation naming the meal's foods, with evidence.
+func assertMedicalFloor(t *testing.T, resp *domain.AnalyzeMealResponse, foodID uuid.UUID) domain.MealViolation {
+	t.Helper()
+	floor := violationsOfType(resp, medicalContextUnknownType)
+	if len(floor) != 1 {
+		t.Fatalf("expected exactly one %s violation, got %+v", medicalContextUnknownType, resp.Violations)
+	}
+	if floor[0].Severity != "WARNING" || !reflect.DeepEqual(floor[0].OffendingFoodIDs, []string{foodID.String()}) {
+		t.Fatalf("unexpected floor violation %+v", floor[0])
+	}
+	evidence := 0
+	for _, e := range resp.EvidencePath {
+		if e.DiseaseID == medicalContextUnknownType && e.RuleDescription == floor[0].Description {
+			evidence++
+		}
+	}
+	if evidence != 1 {
+		t.Fatalf("expected one matching evidence path entry, got %+v", resp.EvidencePath)
+	}
+	return floor[0]
+}
+
+func assertUnknownSent(t *testing.T, kg *mockKgPort) {
+	t.Helper()
+	medical := kg.lastReq.MedicalContext
+	if medical == nil || medical.Present || len(medical.DiseaseIDs) != 0 {
+		t.Fatalf("expected present=false with no ids, got %+v", medical)
+	}
+}
+
+func TestAnalyzeMeal_MedicalContextProfileErrorFloorsAIApproval(t *testing.T) {
+	foodID := uuid.New()
+	kg := &mockKgPort{analyzeMealResp: &domain.AnalyzeMealResponse{Status: "APPROVED"}}
+	resp := analyzeWithUsers(t, greenRiceRepo(foodID), &mockUserRepo{getErr: errProfileUnreadable}, kg, foodID)
+
+	assertUnknownSent(t, kg)
+	if resp.Status != "WARNING" || resp.Safe || resp.HighestRisk != "WARNING" {
+		t.Fatalf("expected WARNING/unsafe/WARNING, got status=%s safe=%v highest=%s", resp.Status, resp.Safe, resp.HighestRisk)
+	}
+	if len(resp.Violations) != 1 {
+		t.Fatalf("expected only the floor violation, got %+v", resp.Violations)
+	}
+	assertMedicalFloor(t, resp, foodID)
+}
+
+func TestAnalyzeMeal_MedicalContextProfileErrorFloorsCatalogFallback(t *testing.T) {
+	foodID := uuid.New()
+	kg := &mockKgPort{analyzeMealResp: &domain.AnalyzeMealResponse{
+		Status:     "REJECTED",
+		Violations: []domain.MealViolation{kgFailureViolation(foodID.String())},
+	}}
+	resp := analyzeWithUsers(t, greenRiceRepo(foodID), &mockUserRepo{getErr: errProfileUnreadable}, kg, foodID)
+
+	if resp.Status != "WARNING" {
+		t.Fatalf("expected the local APPROVED fallback floored to WARNING, got %s", resp.Status)
+	}
+	if len(violationsOfType(resp, "safety_violation")) != 0 {
+		t.Fatalf("the KG-failure violation must still be discarded, got %+v", resp.Violations)
+	}
+	assertMedicalFloor(t, resp, foodID)
+}
+
+func TestAnalyzeMeal_MedicalContextProfileErrorFloorsAIErrorPath(t *testing.T) {
+	foodID := uuid.New()
+	kg := &mockKgPort{analyzeMealErr: errors.New("AI AnalyzeMeal failed")}
+	resp := analyzeWithUsers(t, greenRiceRepo(foodID), &mockUserRepo{getErr: errProfileUnreadable}, kg, foodID)
+
+	if resp.Status != "WARNING" {
+		t.Fatalf("expected WARNING on the AI-error path, got %s", resp.Status)
+	}
+	assertMedicalFloor(t, resp, foodID)
+}
+
+func TestAnalyzeMeal_MedicalContextProfileErrorFloorsNoKGPath(t *testing.T) {
+	foodID := uuid.New()
+	resp := analyzeWithUsers(t, greenRiceRepo(foodID), &mockUserRepo{getErr: errProfileUnreadable}, nil, foodID)
+
+	if resp.Status != "WARNING" {
+		t.Fatalf("expected WARNING without a KG client, got %s", resp.Status)
+	}
+	assertMedicalFloor(t, resp, foodID)
+}
+
+func TestAnalyzeMeal_MedicalContextProfileErrorKeepsRejected(t *testing.T) {
+	foodID := uuid.New()
+	kg := &mockKgPort{analyzeMealResp: &domain.AnalyzeMealResponse{
+		Status: "REJECTED",
+		Violations: []domain.MealViolation{{
+			ViolationType:    "shellfish_allergy",
+			Description:      "Shrimp conflicts with shellfish allergy",
+			Severity:         "RISK_LEVEL_CRITICAL",
+			OffendingFoodIDs: []string{foodID.String()},
+		}},
+	}}
+	resp := analyzeWithUsers(t, greenRiceRepo(foodID), &mockUserRepo{getErr: errProfileUnreadable}, kg, foodID)
+
+	if resp.Status != "REJECTED" || resp.HighestRisk != "CRITICAL" {
+		t.Fatalf("REJECTED must stay REJECTED, got status=%s highest=%s", resp.Status, resp.HighestRisk)
+	}
+	if len(violationsOfType(resp, "shellfish_allergy")) != 1 {
+		t.Fatalf("expected the AI violation kept, got %+v", resp.Violations)
+	}
+	assertMedicalFloor(t, resp, foodID)
+}
+
+func TestAnalyzeMeal_MedicalContextUndecryptableIsUnknown(t *testing.T) {
+	foodID := uuid.New()
+	kg := &mockKgPort{analyzeMealResp: &domain.AnalyzeMealResponse{Status: "APPROVED"}}
+	users := &mockUserRepo{user: &domain.User{TDEE: 2000, MedicalConditions: "v1:QUJDREVGR0hJSktM"}}
+	resp := analyzeWithUsers(t, greenRiceRepo(foodID), users, kg, foodID)
+
+	assertUnknownSent(t, kg)
+	if resp.Status != "WARNING" {
+		t.Fatalf("expected WARNING for an undecryptable profile, got %s", resp.Status)
+	}
+	assertMedicalFloor(t, resp, foodID)
+}
+
+func TestAnalyzeMeal_MedicalContextNilUserIsUnknown(t *testing.T) {
+	foodID := uuid.New()
+	kg := &mockKgPort{analyzeMealResp: &domain.AnalyzeMealResponse{Status: "APPROVED"}}
+	resp := analyzeWithUsers(t, greenRiceRepo(foodID), &mockUserRepo{nilUser: true}, kg, foodID)
+
+	assertUnknownSent(t, kg)
+	if resp.Status != "WARNING" {
+		t.Fatalf("expected WARNING for a nil user, got %s", resp.Status)
+	}
+	assertMedicalFloor(t, resp, foodID)
+}
+
+func TestAnalyzeMeal_MedicalContextKnownProfileUnchanged(t *testing.T) {
+	foodID := uuid.New()
+	kg := &mockKgPort{analyzeMealResp: &domain.AnalyzeMealResponse{Status: "APPROVED"}}
+	users := &mockUserRepo{user: &domain.User{TDEE: 2000, MedicalConditions: " hypertension ,, ckd "}}
+	resp := analyzeWithUsers(t, greenRiceRepo(foodID), users, kg, foodID)
+
+	medical := kg.lastReq.MedicalContext
+	if medical == nil || !medical.Present || !reflect.DeepEqual(medical.DiseaseIDs, []string{"hypertension", "ckd"}) {
+		t.Fatalf("expected present with [hypertension ckd], got %+v", medical)
+	}
+	if resp.Status != "APPROVED" {
+		t.Fatalf("a readable profile must not be floored, got %s", resp.Status)
+	}
+	if len(violationsOfType(resp, medicalContextUnknownType)) != 0 {
+		t.Fatalf("unexpected floor violation %+v", resp.Violations)
+	}
+}
+
+// TestAnalyzeMeal_MedicalContextFloorWording: the floor must never look like
+// an unavailable AI response to Go itself, and must stay user-overridable.
+func TestAnalyzeMeal_MedicalContextFloorWording(t *testing.T) {
+	foodID := uuid.New()
+	kg := &mockKgPort{analyzeMealResp: &domain.AnalyzeMealResponse{Status: "APPROVED"}}
+	resp := analyzeWithUsers(t, greenRiceRepo(foodID), &mockUserRepo{getErr: errProfileUnreadable}, kg, foodID)
+	floor := assertMedicalFloor(t, resp, foodID)
+
+	description := strings.ToLower(floor.Description)
+	// The substrings mealAnalysisUnavailable treats as a discard signal.
+	for _, discard := range []string{"not found in database", "failed to evaluate food", "unavailable"} {
+		if strings.Contains(description, discard) {
+			t.Fatalf("floor description %q contains discard substring %q", floor.Description, discard)
+		}
+	}
+	if strings.Contains(strings.ToUpper(floor.Severity), "CRITICAL") || resp.HighestRisk == "CRITICAL" {
+		t.Fatalf("floor must not read as CRITICAL: severity=%s highest=%s", floor.Severity, resp.HighestRisk)
 	}
 }

@@ -2,6 +2,7 @@ package usecase_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -494,5 +495,83 @@ func TestAnalyzeMealThresholdWire_MedicalConditionsFromProfile(t *testing.T) {
 
 	if got := users.distinctRequested(); !reflect.DeepEqual(got, []uuid.UUID{userA, userB}) {
 		t.Fatalf("profile lookups = %v, want [A B] (the authenticated user ids)", got)
+	}
+}
+
+// TestAnalyzeMealThresholdWire_ProfileErrorSendsUnknown: an unreadable
+// profile goes over the wire as present=false (never an empty present list)
+// and the AI approval comes back floored to WARNING (G-04).
+func TestAnalyzeMealThresholdWire_ProfileErrorSendsUnknown(t *testing.T) {
+	users := &profileUserRepo{err: errors.New("profile read failed")}
+	fake := &fakeIntelligenceServer{}
+	uc, foodID := thresholdWireFixtureWithUsers(t, &mockNutritionRepo{}, fake, users)
+
+	resp, err := uc.AnalyzeMeal(context.Background(), uuid.New(), &domain.AnalyzeMealRequest{
+		Candidate: domain.CandidateMeal{MealID: "manual-lunch", FoodIDs: []string{foodID.String()}, MealType: "lunch"},
+	})
+	if err != nil {
+		t.Fatalf("AnalyzeMeal: %v", err)
+	}
+	medical := fake.received(t).GetMedicalContext()
+	if medical == nil || medical.GetPresent() || len(medical.GetDiseaseIds()) != 0 {
+		t.Fatalf("medical_context = %+v, want set with present=false and no ids", medical)
+	}
+	if resp.Status != "WARNING" {
+		t.Fatalf("status = %s, want WARNING", resp.Status)
+	}
+	floor := 0
+	for _, v := range resp.Violations {
+		if v.ViolationType == "medical_context_unknown" {
+			floor++
+		}
+	}
+	if floor != 1 {
+		t.Fatalf("expected one medical_context_unknown violation, got %+v", resp.Violations)
+	}
+}
+
+// TestAnalyzeMealThresholdWire_PlannerPathLeavesMedicalContextUnset: a nil
+// MedicalContext (the planner callers) leaves the wire field unset (G-05).
+func TestAnalyzeMealThresholdWire_PlannerPathLeavesMedicalContextUnset(t *testing.T) {
+	fake := &fakeIntelligenceServer{}
+	client := startFakeIntelligence(t, fake)
+
+	if _, err := client.AnalyzeMeal(context.Background(), &domain.AnalyzeMealRequest{
+		Candidate: domain.CandidateMeal{MealID: "plan-meal", FoodIDs: []string{"F"}, MealType: "lunch"},
+	}); err != nil {
+		t.Fatalf("AnalyzeMeal: %v", err)
+	}
+	if got := fake.received(t).GetMedicalContext(); got != nil {
+		t.Fatalf("medical_context = %+v, want unset", got)
+	}
+}
+
+// TestAnalyzeMealThresholdWire_ClientCannotSupplyConditions (T-10-23): a REST
+// body's medical context is never bound, and the usecase sends the profile's.
+func TestAnalyzeMealThresholdWire_ClientCannotSupplyConditions(t *testing.T) {
+	userID := uuid.New()
+	users := &profileUserRepo{users: map[uuid.UUID]*domain.User{
+		userID: {ID: userID, TDEE: 2000, MedicalConditions: "hypertension, ckd"},
+	}}
+	fake := &fakeIntelligenceServer{}
+	uc, foodID := thresholdWireFixtureWithUsers(t, &mockNutritionRepo{}, fake, users)
+
+	body := fmt.Sprintf(`{"candidate":{"meal_id":"manual-lunch","food_ids":[%q],"meal_type":"lunch"},`+
+		`"medical_context":{"present":true,"disease_ids":[]},`+
+		`"MedicalContext":{"Present":true,"DiseaseIDs":[]}}`, foodID.String())
+	var req domain.AnalyzeMealRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if req.MedicalContext != nil {
+		t.Fatalf("client medical context must not bind, got %+v", req.MedicalContext)
+	}
+
+	if _, err := uc.AnalyzeMeal(context.Background(), userID, &req); err != nil {
+		t.Fatalf("AnalyzeMeal: %v", err)
+	}
+	medical := fake.received(t).GetMedicalContext()
+	if medical == nil || !medical.GetPresent() || !reflect.DeepEqual(medical.GetDiseaseIds(), []string{"hypertension", "ckd"}) {
+		t.Fatalf("medical_context = %+v, want the profile's [hypertension ckd]", medical)
 	}
 }
