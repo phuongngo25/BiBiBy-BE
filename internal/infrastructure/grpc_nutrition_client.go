@@ -170,14 +170,28 @@ func (g *grpcNutritionClient) AnalyzeMeal(ctx context.Context, req *domain.Analy
 	defer cancel()
 
 	resp, err := g.client.AnalyzeMeal(reqCtx, &pb.AnalyzeMealRequest{
-		Meta:      &commonpb.RequestMeta{RequestId: generateRequestID()},
-		Candidate: buildPbCandidateMeal(req.Candidate),
+		Meta:           &commonpb.RequestMeta{RequestId: generateRequestID()},
+		Candidate:      buildPbCandidateMeal(req.Candidate),
+		MedicalContext: buildPbMedicalContext(req.MedicalContext),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("AI AnalyzeMeal failed: %w", err)
 	}
 
 	return mapPbAnalyzeMealResponse(resp), nil
+}
+
+// buildPbMedicalContext maps the server-side medical context to its wire
+// form (plan 10-04). It is pure: nil stays nil (field unset, the planner
+// path), and the ids are copied into a fresh slice.
+func buildPbMedicalContext(m *domain.UserMedicalContext) *pb.UserMedicalContext {
+	if m == nil {
+		return nil
+	}
+	return &pb.UserMedicalContext{
+		Present:    m.Present,
+		DiseaseIds: append([]string(nil), m.DiseaseIDs...),
+	}
 }
 
 // buildPbCandidateMeal maps a domain candidate to its wire form. It is pure:

@@ -265,6 +265,22 @@ type FoodRef struct {
 
 type AnalyzeMealRequest struct {
 	Candidate CandidateMeal `json:"candidate"`
+	// MedicalContext carries the JWT user's medical conditions (plan 10-04).
+	// The AnalyzeMeal usecase always populates it from the user's Postgres
+	// profile and never binds it from client JSON, because a client could
+	// drop a condition to avoid warnings (NFR-6). nil means "not sent" (the
+	// planner path): AI_server then applies no profile conditions.
+	MedicalContext *UserMedicalContext `json:"-"`
+}
+
+// UserMedicalContext mirrors the proto message of the same name. Present
+// true means DiseaseIDs is the user's complete list of raw profile entries
+// (empty means no recorded conditions); Present false means the profile
+// could not be read, so conditions are UNKNOWN, never "none". AI_server
+// canonicalizes the ids. Server-side only: never bound from client JSON.
+type UserMedicalContext struct {
+	Present    bool     `json:"-"`
+	DiseaseIDs []string `json:"-"`
 }
 
 type MealScore struct {

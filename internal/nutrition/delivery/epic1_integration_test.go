@@ -333,6 +333,7 @@ func TestEpic1C_PlannerExplain(t *testing.T) {
 		kg := new(mockKGMock)
 		userRepo := new(mockUserRepository)
 		router, _, _ := setupRouter(kg, userRepo)
+		userRepo.On("GetByID", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(&domain.User{}, nil)
 
 		mockResponse := &domain.AnalyzeMealResponse{
 			Status: "APPROVED",
@@ -369,9 +370,11 @@ func TestPhase4CompositeMealValidationAPI(t *testing.T) {
 		kg := new(mockKGMock)
 		userRepo := new(mockUserRepository)
 		router, _, _ := setupRouter(kg, userRepo)
+		userRepo.On("GetByID", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(&domain.User{}, nil)
 
 		kg.On("AnalyzeMeal", mock.Anything, mock.MatchedBy(func(req *domain.AnalyzeMealRequest) bool {
-			return len(req.Candidate.FoodIDs) == 1 && req.Candidate.FoodIDs[0] == "shrimp"
+			return len(req.Candidate.FoodIDs) == 1 && req.Candidate.FoodIDs[0] == "shrimp" &&
+				req.MedicalContext != nil && req.MedicalContext.Present
 		})).Return(&domain.AnalyzeMealResponse{
 			Status: "REJECTED",
 			Violations: []domain.MealViolation{
@@ -418,6 +421,7 @@ func TestPhase4CompositeMealValidationAPI(t *testing.T) {
 		kg := new(mockKGMock)
 		userRepo := new(mockUserRepository)
 		router, _, _ := setupRouter(kg, userRepo)
+		userRepo.On("GetByID", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(&domain.User{}, nil)
 
 		kg.On("AnalyzeMeal", mock.Anything, mock.Anything).Return(&domain.AnalyzeMealResponse{
 			Status: "WARNING",
@@ -447,6 +451,7 @@ func TestPhase4CompositeMealValidationAPI(t *testing.T) {
 		kg := new(mockKGMock)
 		userRepo := new(mockUserRepository)
 		router, _, _ := setupRouter(kg, userRepo)
+		userRepo.On("GetByID", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(&domain.User{}, nil)
 
 		kg.On("AnalyzeMeal", mock.Anything, mock.Anything).Return(&domain.AnalyzeMealResponse{
 			Status: "REJECTED",
@@ -476,6 +481,7 @@ func TestPhase4CompositeMealValidationAPI(t *testing.T) {
 		kg := new(mockKGMock)
 		userRepo := new(mockUserRepository)
 		router, _, _ := setupRouter(kg, userRepo)
+		userRepo.On("GetByID", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(&domain.User{}, nil)
 
 		kg.On("AnalyzeMeal", mock.Anything, mock.Anything).Return(&domain.AnalyzeMealResponse{
 			Status:     "APPROVED",

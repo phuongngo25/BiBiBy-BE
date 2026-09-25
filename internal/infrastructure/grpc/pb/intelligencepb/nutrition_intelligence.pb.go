@@ -2395,11 +2395,15 @@ func (x *MealViolation) GetThresholdMg() float64 {
 }
 
 type AnalyzeMealRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	Candidate     *CandidateMeal         `protobuf:"bytes,2,opt,name=candidate,proto3" json:"candidate,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Meta      *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Candidate *CandidateMeal         `protobuf:"bytes,2,opt,name=candidate,proto3" json:"candidate,omitempty"`
+	// Plan 10-04 (additive): the user's medical conditions, read by go_backend
+	// from its own Postgres profile for the JWT user (NFR-6), never from the
+	// client request body. See UserMedicalContext for the presence semantics.
+	MedicalContext *UserMedicalContext `protobuf:"bytes,3,opt,name=medical_context,json=medicalContext,proto3" json:"medical_context,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *AnalyzeMealRequest) Reset() {
@@ -2442,6 +2446,13 @@ func (x *AnalyzeMealRequest) GetMeta() *commonpb.RequestMeta {
 func (x *AnalyzeMealRequest) GetCandidate() *CandidateMeal {
 	if x != nil {
 		return x.Candidate
+	}
+	return nil
+}
+
+func (x *AnalyzeMealRequest) GetMedicalContext() *UserMedicalContext {
+	if x != nil {
+		return x.MedicalContext
 	}
 	return nil
 }
@@ -3127,6 +3138,69 @@ func (x *NutrientThresholdResult) GetNote() string {
 	return ""
 }
 
+// Plan 10-04 (additive): the user's medical conditions for AnalyzeMeal.
+// go_backend fills this from its own Postgres user profile for the JWT user
+// (NFR-6); it is never taken from the client request body.
+//   - Field unset on AnalyzeMealRequest: the caller supplied no profile
+//     (planner callers, legacy tests).
+//   - present=true: disease_ids is the user's complete list; an empty list
+//     means the user has no recorded conditions.
+//   - present=false: the profile could not be read, so conditions are UNKNOWN,
+//     never "none".
+//
+// Values are raw profile entries; AI_server canonicalizes them.
+type UserMedicalContext struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Present       bool                   `protobuf:"varint,1,opt,name=present,proto3" json:"present,omitempty"`
+	DiseaseIds    []string               `protobuf:"bytes,2,rep,name=disease_ids,json=diseaseIds,proto3" json:"disease_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UserMedicalContext) Reset() {
+	*x = UserMedicalContext{}
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserMedicalContext) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserMedicalContext) ProtoMessage() {}
+
+func (x *UserMedicalContext) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserMedicalContext.ProtoReflect.Descriptor instead.
+func (*UserMedicalContext) Descriptor() ([]byte, []int) {
+	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *UserMedicalContext) GetPresent() bool {
+	if x != nil {
+		return x.Present
+	}
+	return false
+}
+
+func (x *UserMedicalContext) GetDiseaseIds() []string {
+	if x != nil {
+		return x.DiseaseIds
+	}
+	return nil
+}
+
 var File_v1_nutrition_intelligence_proto protoreflect.FileDescriptor
 
 const file_v1_nutrition_intelligence_proto_rawDesc = "" +
@@ -3324,10 +3398,11 @@ const file_v1_nutrition_intelligence_proto_rawDesc = "" +
 	"\fprojected_mg\x18\x06 \x01(\x01H\x00R\vprojectedMg\x88\x01\x01\x12&\n" +
 	"\fthreshold_mg\x18\a \x01(\x01H\x01R\vthresholdMg\x88\x01\x01B\x0f\n" +
 	"\r_projected_mgB\x0f\n" +
-	"\r_threshold_mg\"\x8c\x01\n" +
+	"\r_threshold_mg\"\xe1\x01\n" +
 	"\x12AnalyzeMealRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.nutrix.common.v1.RequestMetaR\x04meta\x12C\n" +
-	"\tcandidate\x18\x02 \x01(\v2%.nutrix.intelligence.v1.CandidateMealR\tcandidate\"\xc4\x04\n" +
+	"\tcandidate\x18\x02 \x01(\v2%.nutrix.intelligence.v1.CandidateMealR\tcandidate\x12S\n" +
+	"\x0fmedical_context\x18\x03 \x01(\v2*.nutrix.intelligence.v1.UserMedicalContextR\x0emedicalContext\"\xc4\x04\n" +
 	"\x13AnalyzeMealResponse\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.nutrix.common.v1.RequestMetaR\x04meta\x12B\n" +
 	"\x06status\x18\x02 \x01(\x0e2*.nutrix.intelligence.v1.MealApprovalStatusR\x06status\x127\n" +
@@ -3405,7 +3480,11 @@ const file_v1_nutrition_intelligence_proto_rawDesc = "" +
 	"\x04note\x18\f \x01(\tR\x04noteB\x0f\n" +
 	"\r_this_meal_mgB\x14\n" +
 	"\x12_consumed_today_mgB\x0f\n" +
-	"\r_projected_mg*^\n" +
+	"\r_projected_mg\"O\n" +
+	"\x12UserMedicalContext\x12\x18\n" +
+	"\apresent\x18\x01 \x01(\bR\apresent\x12\x1f\n" +
+	"\vdisease_ids\x18\x02 \x03(\tR\n" +
+	"diseaseIds*^\n" +
 	"\x18RecommendationReasonType\x12*\n" +
 	"&RECOMMENDATION_REASON_TYPE_UNSPECIFIED\x10\x00\x12\t\n" +
 	"\x05BOOST\x10\x01\x12\v\n" +
@@ -3445,7 +3524,7 @@ func file_v1_nutrition_intelligence_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_nutrition_intelligence_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_v1_nutrition_intelligence_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
+var file_v1_nutrition_intelligence_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_v1_nutrition_intelligence_proto_goTypes = []any{
 	(RecommendationReasonType)(0),        // 0: nutrix.intelligence.v1.RecommendationReasonType
 	(MealApprovalStatus)(0),              // 1: nutrix.intelligence.v1.MealApprovalStatus
@@ -3492,85 +3571,87 @@ var file_v1_nutrition_intelligence_proto_goTypes = []any{
 	(*DailyIntakeContext)(nil),           // 42: nutrix.intelligence.v1.DailyIntakeContext
 	(*MassResolution)(nil),               // 43: nutrix.intelligence.v1.MassResolution
 	(*NutrientThresholdResult)(nil),      // 44: nutrix.intelligence.v1.NutrientThresholdResult
-	nil,                                  // 45: nutrix.intelligence.v1.DailyNutritionSnapshot.MicronutrientsEntry
-	(*commonpb.RequestMeta)(nil),         // 46: nutrix.common.v1.RequestMeta
-	(commonpb.RiskLevel)(0),              // 47: nutrix.common.v1.RiskLevel
-	(*commonpb.EvidencePath)(nil),        // 48: nutrix.common.v1.EvidencePath
+	(*UserMedicalContext)(nil),           // 45: nutrix.intelligence.v1.UserMedicalContext
+	nil,                                  // 46: nutrix.intelligence.v1.DailyNutritionSnapshot.MicronutrientsEntry
+	(*commonpb.RequestMeta)(nil),         // 47: nutrix.common.v1.RequestMeta
+	(commonpb.RiskLevel)(0),              // 48: nutrix.common.v1.RiskLevel
+	(*commonpb.EvidencePath)(nil),        // 49: nutrix.common.v1.EvidencePath
 }
 var file_v1_nutrition_intelligence_proto_depIdxs = []int32{
-	46, // 0: nutrix.intelligence.v1.HealthCheckRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	46, // 1: nutrix.intelligence.v1.AnalyzeFoodRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	46, // 2: nutrix.intelligence.v1.AnalyzeFoodResponse.meta:type_name -> nutrix.common.v1.RequestMeta
-	47, // 3: nutrix.intelligence.v1.AnalyzeFoodResponse.risk_level:type_name -> nutrix.common.v1.RiskLevel
-	48, // 4: nutrix.intelligence.v1.AnalyzeFoodResponse.evidence_paths:type_name -> nutrix.common.v1.EvidencePath
+	47, // 0: nutrix.intelligence.v1.HealthCheckRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	47, // 1: nutrix.intelligence.v1.AnalyzeFoodRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	47, // 2: nutrix.intelligence.v1.AnalyzeFoodResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	48, // 3: nutrix.intelligence.v1.AnalyzeFoodResponse.risk_level:type_name -> nutrix.common.v1.RiskLevel
+	49, // 4: nutrix.intelligence.v1.AnalyzeFoodResponse.evidence_paths:type_name -> nutrix.common.v1.EvidencePath
 	27, // 5: nutrix.intelligence.v1.AnalyzeFoodResponse.alternative_explanations:type_name -> nutrix.intelligence.v1.AlternativeExplanation
-	46, // 6: nutrix.intelligence.v1.GetThresholdSnapshotRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	47, // 6: nutrix.intelligence.v1.GetThresholdSnapshotRequest.meta:type_name -> nutrix.common.v1.RequestMeta
 	8,  // 7: nutrix.intelligence.v1.ThresholdSnapshot.thresholds:type_name -> nutrix.intelligence.v1.NutrientThresholdSnapshot
-	46, // 8: nutrix.intelligence.v1.GetThresholdSnapshotResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	47, // 8: nutrix.intelligence.v1.GetThresholdSnapshotResponse.meta:type_name -> nutrix.common.v1.RequestMeta
 	9,  // 9: nutrix.intelligence.v1.GetThresholdSnapshotResponse.snapshot:type_name -> nutrix.intelligence.v1.ThresholdSnapshot
-	46, // 10: nutrix.intelligence.v1.SubmitFoodCorrectionRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	46, // 11: nutrix.intelligence.v1.SubmitFoodCorrectionResponse.meta:type_name -> nutrix.common.v1.RequestMeta
-	46, // 12: nutrix.intelligence.v1.GetFeedbackAnalyticsRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	46, // 13: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	47, // 10: nutrix.intelligence.v1.SubmitFoodCorrectionRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	47, // 11: nutrix.intelligence.v1.SubmitFoodCorrectionResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	47, // 12: nutrix.intelligence.v1.GetFeedbackAnalyticsRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	47, // 13: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.meta:type_name -> nutrix.common.v1.RequestMeta
 	14, // 14: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.top_misclassified:type_name -> nutrix.intelligence.v1.MisclassifiedFood
 	15, // 15: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.confidence_distribution:type_name -> nutrix.intelligence.v1.ConfidenceBucket
 	16, // 16: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.volume:type_name -> nutrix.intelligence.v1.CorrectionVolume
-	45, // 17: nutrix.intelligence.v1.DailyNutritionSnapshot.micronutrients:type_name -> nutrix.intelligence.v1.DailyNutritionSnapshot.MicronutrientsEntry
+	46, // 17: nutrix.intelligence.v1.DailyNutritionSnapshot.micronutrients:type_name -> nutrix.intelligence.v1.DailyNutritionSnapshot.MicronutrientsEntry
 	19, // 18: nutrix.intelligence.v1.UserNutritionGoal.targets:type_name -> nutrix.intelligence.v1.NutrientTarget
-	46, // 19: nutrix.intelligence.v1.GetNutritionGapRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	47, // 19: nutrix.intelligence.v1.GetNutritionGapRequest.meta:type_name -> nutrix.common.v1.RequestMeta
 	20, // 20: nutrix.intelligence.v1.GetNutritionGapRequest.goal:type_name -> nutrix.intelligence.v1.UserNutritionGoal
 	18, // 21: nutrix.intelligence.v1.GetNutritionGapRequest.snapshot:type_name -> nutrix.intelligence.v1.DailyNutritionSnapshot
-	46, // 22: nutrix.intelligence.v1.GetNutritionGapResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	47, // 22: nutrix.intelligence.v1.GetNutritionGapResponse.meta:type_name -> nutrix.common.v1.RequestMeta
 	22, // 23: nutrix.intelligence.v1.GetNutritionGapResponse.gaps:type_name -> nutrix.intelligence.v1.NutritionGap
-	46, // 24: nutrix.intelligence.v1.GetRecommendationsRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	47, // 24: nutrix.intelligence.v1.GetRecommendationsRequest.meta:type_name -> nutrix.common.v1.RequestMeta
 	24, // 25: nutrix.intelligence.v1.GetRecommendationsRequest.gaps:type_name -> nutrix.intelligence.v1.NutrientGapItem
 	0,  // 26: nutrix.intelligence.v1.RecommendationTrace.reason_type:type_name -> nutrix.intelligence.v1.RecommendationReasonType
 	26, // 27: nutrix.intelligence.v1.AlternativeExplanation.recommendation_trace:type_name -> nutrix.intelligence.v1.RecommendationTrace
 	26, // 28: nutrix.intelligence.v1.Recommendation.traces:type_name -> nutrix.intelligence.v1.RecommendationTrace
-	46, // 29: nutrix.intelligence.v1.GetRecommendationsResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	47, // 29: nutrix.intelligence.v1.GetRecommendationsResponse.meta:type_name -> nutrix.common.v1.RequestMeta
 	28, // 30: nutrix.intelligence.v1.GetRecommendationsResponse.recommendations:type_name -> nutrix.intelligence.v1.Recommendation
 	32, // 31: nutrix.intelligence.v1.CandidateMeal.food_refs:type_name -> nutrix.intelligence.v1.FoodRef
 	40, // 32: nutrix.intelligence.v1.CandidateMeal.food_masses:type_name -> nutrix.intelligence.v1.FoodMassInput
 	42, // 33: nutrix.intelligence.v1.CandidateMeal.daily_intake:type_name -> nutrix.intelligence.v1.DailyIntakeContext
 	31, // 34: nutrix.intelligence.v1.MealFixSuggestion.replacement:type_name -> nutrix.intelligence.v1.CandidateMeal
 	33, // 35: nutrix.intelligence.v1.MealFixSuggestion.impact:type_name -> nutrix.intelligence.v1.MealFixImpact
-	47, // 36: nutrix.intelligence.v1.MealViolation.severity:type_name -> nutrix.common.v1.RiskLevel
-	46, // 37: nutrix.intelligence.v1.AnalyzeMealRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	48, // 36: nutrix.intelligence.v1.MealViolation.severity:type_name -> nutrix.common.v1.RiskLevel
+	47, // 37: nutrix.intelligence.v1.AnalyzeMealRequest.meta:type_name -> nutrix.common.v1.RequestMeta
 	31, // 38: nutrix.intelligence.v1.AnalyzeMealRequest.candidate:type_name -> nutrix.intelligence.v1.CandidateMeal
-	46, // 39: nutrix.intelligence.v1.AnalyzeMealResponse.meta:type_name -> nutrix.common.v1.RequestMeta
-	1,  // 40: nutrix.intelligence.v1.AnalyzeMealResponse.status:type_name -> nutrix.intelligence.v1.MealApprovalStatus
-	30, // 41: nutrix.intelligence.v1.AnalyzeMealResponse.score:type_name -> nutrix.intelligence.v1.MealScore
-	35, // 42: nutrix.intelligence.v1.AnalyzeMealResponse.violations:type_name -> nutrix.intelligence.v1.MealViolation
-	34, // 43: nutrix.intelligence.v1.AnalyzeMealResponse.fixes:type_name -> nutrix.intelligence.v1.MealFixSuggestion
-	39, // 44: nutrix.intelligence.v1.AnalyzeMealResponse.enrichment:type_name -> nutrix.intelligence.v1.MealEnrichment
-	44, // 45: nutrix.intelligence.v1.AnalyzeMealResponse.nutrient_results:type_name -> nutrix.intelligence.v1.NutrientThresholdResult
-	43, // 46: nutrix.intelligence.v1.AnalyzeMealResponse.mass_resolutions:type_name -> nutrix.intelligence.v1.MassResolution
-	38, // 47: nutrix.intelligence.v1.MealEnrichment.ingredients:type_name -> nutrix.intelligence.v1.MealIngredientDetail
-	2,  // 48: nutrix.intelligence.v1.FoodMassInput.actual_mass_source:type_name -> nutrix.intelligence.v1.MassSource
-	41, // 49: nutrix.intelligence.v1.DailyIntakeContext.items:type_name -> nutrix.intelligence.v1.ConsumedFoodItem
-	2,  // 50: nutrix.intelligence.v1.MassResolution.mass_source:type_name -> nutrix.intelligence.v1.MassSource
-	2,  // 51: nutrix.intelligence.v1.MassResolution.authoritative_mass_source:type_name -> nutrix.intelligence.v1.MassSource
-	3,  // 52: nutrix.intelligence.v1.NutritionIntelligenceService.HealthCheck:input_type -> nutrix.intelligence.v1.HealthCheckRequest
-	5,  // 53: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeFood:input_type -> nutrix.intelligence.v1.AnalyzeFoodRequest
-	7,  // 54: nutrix.intelligence.v1.NutritionIntelligenceService.GetThresholdSnapshot:input_type -> nutrix.intelligence.v1.GetThresholdSnapshotRequest
-	11, // 55: nutrix.intelligence.v1.NutritionIntelligenceService.SubmitFoodCorrection:input_type -> nutrix.intelligence.v1.SubmitFoodCorrectionRequest
-	13, // 56: nutrix.intelligence.v1.NutritionIntelligenceService.GetFeedbackAnalytics:input_type -> nutrix.intelligence.v1.GetFeedbackAnalyticsRequest
-	21, // 57: nutrix.intelligence.v1.NutritionIntelligenceService.GetNutritionGap:input_type -> nutrix.intelligence.v1.GetNutritionGapRequest
-	25, // 58: nutrix.intelligence.v1.NutritionIntelligenceService.GetRecommendations:input_type -> nutrix.intelligence.v1.GetRecommendationsRequest
-	36, // 59: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeMeal:input_type -> nutrix.intelligence.v1.AnalyzeMealRequest
-	4,  // 60: nutrix.intelligence.v1.NutritionIntelligenceService.HealthCheck:output_type -> nutrix.intelligence.v1.HealthCheckResponse
-	6,  // 61: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeFood:output_type -> nutrix.intelligence.v1.AnalyzeFoodResponse
-	10, // 62: nutrix.intelligence.v1.NutritionIntelligenceService.GetThresholdSnapshot:output_type -> nutrix.intelligence.v1.GetThresholdSnapshotResponse
-	12, // 63: nutrix.intelligence.v1.NutritionIntelligenceService.SubmitFoodCorrection:output_type -> nutrix.intelligence.v1.SubmitFoodCorrectionResponse
-	17, // 64: nutrix.intelligence.v1.NutritionIntelligenceService.GetFeedbackAnalytics:output_type -> nutrix.intelligence.v1.GetFeedbackAnalyticsResponse
-	23, // 65: nutrix.intelligence.v1.NutritionIntelligenceService.GetNutritionGap:output_type -> nutrix.intelligence.v1.GetNutritionGapResponse
-	29, // 66: nutrix.intelligence.v1.NutritionIntelligenceService.GetRecommendations:output_type -> nutrix.intelligence.v1.GetRecommendationsResponse
-	37, // 67: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeMeal:output_type -> nutrix.intelligence.v1.AnalyzeMealResponse
-	60, // [60:68] is the sub-list for method output_type
-	52, // [52:60] is the sub-list for method input_type
-	52, // [52:52] is the sub-list for extension type_name
-	52, // [52:52] is the sub-list for extension extendee
-	0,  // [0:52] is the sub-list for field type_name
+	45, // 39: nutrix.intelligence.v1.AnalyzeMealRequest.medical_context:type_name -> nutrix.intelligence.v1.UserMedicalContext
+	47, // 40: nutrix.intelligence.v1.AnalyzeMealResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	1,  // 41: nutrix.intelligence.v1.AnalyzeMealResponse.status:type_name -> nutrix.intelligence.v1.MealApprovalStatus
+	30, // 42: nutrix.intelligence.v1.AnalyzeMealResponse.score:type_name -> nutrix.intelligence.v1.MealScore
+	35, // 43: nutrix.intelligence.v1.AnalyzeMealResponse.violations:type_name -> nutrix.intelligence.v1.MealViolation
+	34, // 44: nutrix.intelligence.v1.AnalyzeMealResponse.fixes:type_name -> nutrix.intelligence.v1.MealFixSuggestion
+	39, // 45: nutrix.intelligence.v1.AnalyzeMealResponse.enrichment:type_name -> nutrix.intelligence.v1.MealEnrichment
+	44, // 46: nutrix.intelligence.v1.AnalyzeMealResponse.nutrient_results:type_name -> nutrix.intelligence.v1.NutrientThresholdResult
+	43, // 47: nutrix.intelligence.v1.AnalyzeMealResponse.mass_resolutions:type_name -> nutrix.intelligence.v1.MassResolution
+	38, // 48: nutrix.intelligence.v1.MealEnrichment.ingredients:type_name -> nutrix.intelligence.v1.MealIngredientDetail
+	2,  // 49: nutrix.intelligence.v1.FoodMassInput.actual_mass_source:type_name -> nutrix.intelligence.v1.MassSource
+	41, // 50: nutrix.intelligence.v1.DailyIntakeContext.items:type_name -> nutrix.intelligence.v1.ConsumedFoodItem
+	2,  // 51: nutrix.intelligence.v1.MassResolution.mass_source:type_name -> nutrix.intelligence.v1.MassSource
+	2,  // 52: nutrix.intelligence.v1.MassResolution.authoritative_mass_source:type_name -> nutrix.intelligence.v1.MassSource
+	3,  // 53: nutrix.intelligence.v1.NutritionIntelligenceService.HealthCheck:input_type -> nutrix.intelligence.v1.HealthCheckRequest
+	5,  // 54: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeFood:input_type -> nutrix.intelligence.v1.AnalyzeFoodRequest
+	7,  // 55: nutrix.intelligence.v1.NutritionIntelligenceService.GetThresholdSnapshot:input_type -> nutrix.intelligence.v1.GetThresholdSnapshotRequest
+	11, // 56: nutrix.intelligence.v1.NutritionIntelligenceService.SubmitFoodCorrection:input_type -> nutrix.intelligence.v1.SubmitFoodCorrectionRequest
+	13, // 57: nutrix.intelligence.v1.NutritionIntelligenceService.GetFeedbackAnalytics:input_type -> nutrix.intelligence.v1.GetFeedbackAnalyticsRequest
+	21, // 58: nutrix.intelligence.v1.NutritionIntelligenceService.GetNutritionGap:input_type -> nutrix.intelligence.v1.GetNutritionGapRequest
+	25, // 59: nutrix.intelligence.v1.NutritionIntelligenceService.GetRecommendations:input_type -> nutrix.intelligence.v1.GetRecommendationsRequest
+	36, // 60: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeMeal:input_type -> nutrix.intelligence.v1.AnalyzeMealRequest
+	4,  // 61: nutrix.intelligence.v1.NutritionIntelligenceService.HealthCheck:output_type -> nutrix.intelligence.v1.HealthCheckResponse
+	6,  // 62: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeFood:output_type -> nutrix.intelligence.v1.AnalyzeFoodResponse
+	10, // 63: nutrix.intelligence.v1.NutritionIntelligenceService.GetThresholdSnapshot:output_type -> nutrix.intelligence.v1.GetThresholdSnapshotResponse
+	12, // 64: nutrix.intelligence.v1.NutritionIntelligenceService.SubmitFoodCorrection:output_type -> nutrix.intelligence.v1.SubmitFoodCorrectionResponse
+	17, // 65: nutrix.intelligence.v1.NutritionIntelligenceService.GetFeedbackAnalytics:output_type -> nutrix.intelligence.v1.GetFeedbackAnalyticsResponse
+	23, // 66: nutrix.intelligence.v1.NutritionIntelligenceService.GetNutritionGap:output_type -> nutrix.intelligence.v1.GetNutritionGapResponse
+	29, // 67: nutrix.intelligence.v1.NutritionIntelligenceService.GetRecommendations:output_type -> nutrix.intelligence.v1.GetRecommendationsResponse
+	37, // 68: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeMeal:output_type -> nutrix.intelligence.v1.AnalyzeMealResponse
+	61, // [61:69] is the sub-list for method output_type
+	53, // [53:61] is the sub-list for method input_type
+	53, // [53:53] is the sub-list for extension type_name
+	53, // [53:53] is the sub-list for extension extendee
+	0,  // [0:53] is the sub-list for field type_name
 }
 
 func init() { file_v1_nutrition_intelligence_proto_init() }
@@ -3589,7 +3670,7 @@ func file_v1_nutrition_intelligence_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_nutrition_intelligence_proto_rawDesc), len(file_v1_nutrition_intelligence_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   43,
+			NumMessages:   44,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

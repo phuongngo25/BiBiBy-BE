@@ -3,9 +3,13 @@ package usecase_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"math"
 	"net"
+	"reflect"
 	"regexp"
+	"strings"
 	"sync"
 	"testing"
 
@@ -28,12 +32,17 @@ type fakeIntelligenceServer struct {
 	mu      sync.Mutex
 	lastReq *pb.AnalyzeMealRequest
 	resp    *pb.AnalyzeMealResponse
+	// respond, when non-nil, computes the answer from the request (under mu).
+	respond func(*pb.AnalyzeMealRequest) *pb.AnalyzeMealResponse
 }
 
 func (f *fakeIntelligenceServer) AnalyzeMeal(_ context.Context, req *pb.AnalyzeMealRequest) (*pb.AnalyzeMealResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.lastReq = req
+	if f.respond != nil {
+		return f.respond(req), nil
+	}
 	if f.resp == nil {
 		return &pb.AnalyzeMealResponse{Status: pb.MealApprovalStatus_APPROVED}, nil
 	}
@@ -79,6 +88,13 @@ func f64(v float64) *float64 { return &v }
 // fake AI server, with one catalog food that has no local violation.
 func thresholdWireFixture(t *testing.T, repo *mockNutritionRepo, fake *fakeIntelligenceServer) (domain.NutritionUseCase, uuid.UUID) {
 	t.Helper()
+	return thresholdWireFixtureWithUsers(t, repo, fake, &mockUserRepo{user: &domain.User{TDEE: 2000}})
+}
+
+// thresholdWireFixtureWithUsers is thresholdWireFixture with a caller-chosen
+// user repository (the "Postgres profile" source, plan 10-04).
+func thresholdWireFixtureWithUsers(t *testing.T, repo *mockNutritionRepo, fake *fakeIntelligenceServer, userRepo domain.UserRepository) (domain.NutritionUseCase, uuid.UUID) {
+	t.Helper()
 	foodID := uuid.New()
 	if repo.foodsByID == nil {
 		repo.foodsByID = map[uuid.UUID]domain.Food{}
@@ -90,7 +106,6 @@ func thresholdWireFixture(t *testing.T, repo *mockNutritionRepo, fake *fakeIntel
 		Source: "VFA_DISH",
 	}
 	client := startFakeIntelligence(t, fake)
-	userRepo := &mockUserRepo{user: &domain.User{TDEE: 2000}}
 	uc := usecase.NewNutritionUseCase(repo, nil, nil, nil, &mockWorkoutRepo{}, userRepo, nil, client, nil)
 	return uc, foodID
 }
@@ -298,5 +313,186 @@ func TestAnalyzeMealThresholdWire_FoodMassesSeparate(t *testing.T) {
 	}
 	if r.MassSource != "cv_estimated" || r.AuthoritativeMassSource != "user_entered" {
 		t.Fatalf("unexpected mass provenance: %+v", r)
+	}
+}
+
+// ─── Plan 10-04: medical conditions from the Postgres profile ───────────────
+
+// profileUserRepo stands in for the Postgres users table: GetByID returns
+// users[id] (domain.ErrUserNotFound when absent, or err when set) and
+// records every requested id.
+type profileUserRepo struct {
+	mockUserRepo
+
+	mu        sync.Mutex
+	users     map[uuid.UUID]*domain.User
+	err       error
+	requested []uuid.UUID
+}
+
+func (r *profileUserRepo) GetByID(_ context.Context, id uuid.UUID) (*domain.User, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.requested = append(r.requested, id)
+	if r.err != nil {
+		return nil, r.err
+	}
+	user, ok := r.users[id]
+	if !ok {
+		return nil, domain.ErrUserNotFound
+	}
+	return user, nil
+}
+
+// distinctRequested returns the requested ids with consecutive repeats
+// collapsed (one AnalyzeMeal call may read the same profile more than once).
+func (r *profileUserRepo) distinctRequested() []uuid.UUID {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []uuid.UUID
+	for _, id := range r.requested {
+		if len(out) == 0 || out[len(out)-1] != id {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// canonicalDiseaseID mirrors AI_server's canonicalize_disease_id.
+func canonicalDiseaseID(raw string) string {
+	id := strings.ToUpper(strings.TrimSpace(raw))
+	if !strings.HasPrefix(id, "D_") {
+		id = "D_" + id
+	}
+	return id
+}
+
+// sodiumPolicyResponder stands in for AI_server's threshold policy
+// (configs/threshold_policy.yaml sodium, most restrictive wins) for a meal
+// whose projected sodium is 1800 mg.
+func sodiumPolicyResponder(foodID string) func(*pb.AnalyzeMealRequest) *pb.AnalyzeMealResponse {
+	type limits struct{ warning, critical float64 }
+	overrides := map[string]limits{
+		"D_HYPERTENSION": {1000, 1500},
+		"D_CKD":          {800, 1500},
+	}
+	return func(req *pb.AnalyzeMealRequest) *pb.AnalyzeMealResponse {
+		warning, critical, override := 1500.0, 2300.0, false
+		if medical := req.GetMedicalContext(); medical.GetPresent() {
+			for _, raw := range medical.GetDiseaseIds() {
+				if l, ok := overrides[canonicalDiseaseID(raw)]; ok {
+					override = true
+					warning = math.Min(warning, l.warning)
+					critical = math.Min(critical, l.critical)
+				}
+			}
+		}
+		const projected = 1800.0
+		status, severity, resultStatus := pb.MealApprovalStatus_WARNING, commonpb.RiskLevel_RISK_LEVEL_HIGH, "WARNING"
+		threshold := warning
+		description := fmt.Sprintf("Sodium: projected %.0f mg today meets or exceeds your warning limit of %.0f mg", projected, warning)
+		if projected >= critical {
+			status, severity, resultStatus = pb.MealApprovalStatus_REJECTED, commonpb.RiskLevel_RISK_LEVEL_CRITICAL, "CRITICAL"
+			threshold = critical
+			description = fmt.Sprintf("Sodium: projected %.0f mg today meets or exceeds your critical limit of %.0f mg", projected, critical)
+		}
+		return &pb.AnalyzeMealResponse{
+			Status: status,
+			Score:  &pb.MealScore{SafetyScore: 1, MacroScore: 1, MicronutrientScore: 1, ConstraintScore: 1},
+			Violations: []*pb.MealViolation{{
+				ViolationType:    "nutrient_threshold",
+				Description:      description,
+				Severity:         severity,
+				OffendingFoodIds: []string{foodID},
+				NutrientId:       "sodium",
+				ProjectedMg:      f64(projected),
+				ThresholdMg:      f64(threshold),
+			}},
+			NutrientResults: []*pb.NutrientThresholdResult{{
+				NutrientId:          "sodium",
+				Status:              resultStatus,
+				ThisMealMg:          f64(projected),
+				ProjectedMg:         f64(projected),
+				Complete:            true,
+				WarningMg:           warning,
+				CriticalMg:          critical,
+				DiseaseOverride:     override,
+				ContributingFoodIds: []string{foodID},
+			}},
+		}
+	}
+}
+
+func sodiumResult(t *testing.T, resp *domain.AnalyzeMealResponse) domain.NutrientThresholdResult {
+	t.Helper()
+	for _, r := range resp.NutrientResults {
+		if r.NutrientID == "sodium" {
+			return r
+		}
+	}
+	t.Fatalf("no sodium NutrientResult in %+v", resp.NutrientResults)
+	return domain.NutrientThresholdResult{}
+}
+
+// TestAnalyzeMealThresholdWire_MedicalConditionsFromProfile is the 10-04
+// tracer: the JWT user's Postgres medical conditions reach AI_server over
+// real gRPC and the disease-specific verdict comes back.
+func TestAnalyzeMealThresholdWire_MedicalConditionsFromProfile(t *testing.T) {
+	userA, userB := uuid.New(), uuid.New()
+	users := &profileUserRepo{users: map[uuid.UUID]*domain.User{
+		userA: {ID: userA, TDEE: 2000, MedicalConditions: "hypertension, ckd"},
+		userB: {ID: userB, TDEE: 2000, MedicalConditions: ""},
+	}}
+	fake := &fakeIntelligenceServer{}
+	uc, foodID := thresholdWireFixtureWithUsers(t, &mockNutritionRepo{}, fake, users)
+	fake.mu.Lock()
+	fake.respond = sodiumPolicyResponder(foodID.String())
+	fake.mu.Unlock()
+	meal := func() *domain.AnalyzeMealRequest {
+		return &domain.AnalyzeMealRequest{
+			Candidate: domain.CandidateMeal{MealID: "manual-lunch", FoodIDs: []string{foodID.String()}, MealType: "lunch"},
+		}
+	}
+
+	respA, err := uc.AnalyzeMeal(context.Background(), userA, meal())
+	if err != nil {
+		t.Fatalf("AnalyzeMeal(A): %v", err)
+	}
+	medical := fake.received(t).GetMedicalContext()
+	if medical == nil || !medical.GetPresent() {
+		t.Fatalf("user A: medical_context = %+v, want present", medical)
+	}
+	if got := medical.GetDiseaseIds(); !reflect.DeepEqual(got, []string{"hypertension", "ckd"}) {
+		t.Fatalf("user A: disease_ids = %q, want [hypertension ckd]", got)
+	}
+	if respA.Status != "REJECTED" || respA.HighestRisk != "CRITICAL" {
+		t.Fatalf("user A: status=%s highestRisk=%s, want REJECTED/CRITICAL", respA.Status, respA.HighestRisk)
+	}
+	sodiumA := sodiumResult(t, respA)
+	if !sodiumA.DiseaseOverride || sodiumA.WarningMg != 800 || sodiumA.CriticalMg != 1500 {
+		t.Fatalf("user A: sodium result %+v, want override 800/1500", sodiumA)
+	}
+	if len(respA.Violations) != 1 || respA.Violations[0].ThresholdMg == nil || *respA.Violations[0].ThresholdMg != 1500 {
+		t.Fatalf("user A: violations %+v, want one at threshold 1500", respA.Violations)
+	}
+
+	respB, err := uc.AnalyzeMeal(context.Background(), userB, meal())
+	if err != nil {
+		t.Fatalf("AnalyzeMeal(B): %v", err)
+	}
+	medical = fake.received(t).GetMedicalContext()
+	if medical == nil || !medical.GetPresent() || len(medical.GetDiseaseIds()) != 0 {
+		t.Fatalf("user B: medical_context = %+v, want present with no ids", medical)
+	}
+	if respB.Status != "WARNING" {
+		t.Fatalf("user B: status=%s, want WARNING", respB.Status)
+	}
+	sodiumB := sodiumResult(t, respB)
+	if sodiumB.DiseaseOverride || sodiumB.CriticalMg != 2300 {
+		t.Fatalf("user B: sodium result %+v, want default critical 2300", sodiumB)
+	}
+
+	if got := users.distinctRequested(); !reflect.DeepEqual(got, []uuid.UUID{userA, userB}) {
+		t.Fatalf("profile lookups = %v, want [A B] (the authenticated user ids)", got)
 	}
 }

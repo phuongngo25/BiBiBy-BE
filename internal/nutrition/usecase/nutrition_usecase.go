@@ -1760,6 +1760,11 @@ func (u *nutritionUseCase) ReoptimizePlan(ctx context.Context, userID uuid.UUID,
 }
 
 func (u *nutritionUseCase) AnalyzeMeal(ctx context.Context, userID uuid.UUID, req *domain.AnalyzeMealRequest) (*domain.AnalyzeMealResponse, error) {
+	// Medical conditions always come from the JWT user's Postgres profile,
+	// server-side only (plan 10-04, NFR-6); any client value is overwritten.
+	medical := u.medicalContextForUser(ctx, userID)
+	req.MedicalContext = medical
+
 	if u.kgPort == nil {
 		if localResp := u.analyzeMealFromCatalog(ctx, userID, req); localResp != nil {
 			return localResp, nil
@@ -1926,6 +1931,32 @@ func (u *nutritionUseCase) dailyIntakeForUser(ctx context.Context, userID uuid.U
 		})
 	}
 	return &domain.DailyIntakeContext{Present: true, Items: items, ConsumedDate: consumedDate}
+}
+
+// medicalContextForUser loads the JWT user's medical conditions for
+// AI_server (plan 10-04). A missing repository, a repository error or a nil
+// user yields Present=false (conditions UNKNOWN), never an empty present
+// list. Entries are sent raw and trimmed; AI_server canonicalizes them.
+// Conditions are never logged: only the error type is.
+func (u *nutritionUseCase) medicalContextForUser(ctx context.Context, userID uuid.UUID) *domain.UserMedicalContext {
+	if u.userRepo == nil {
+		return &domain.UserMedicalContext{Present: false}
+	}
+	user, err := u.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		log.Printf("[AnalyzeMeal] medical profile unreadable, sending unknown: %T", err)
+		return &domain.UserMedicalContext{Present: false}
+	}
+	if user == nil {
+		return &domain.UserMedicalContext{Present: false}
+	}
+	ids := make([]string, 0)
+	for _, part := range strings.Split(user.MedicalConditions, ",") {
+		if id := strings.TrimSpace(part); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return &domain.UserMedicalContext{Present: true, DiseaseIDs: ids}
 }
 
 func (u *nutritionUseCase) analyzeMealFromCatalog(ctx context.Context, userID uuid.UUID, req *domain.AnalyzeMealRequest) *domain.AnalyzeMealResponse {
