@@ -1807,7 +1807,10 @@ func (u *nutritionUseCase) AnalyzeMeal(ctx context.Context, userID uuid.UUID, re
 	localResp := u.analyzeMealFromCatalog(ctx, userID, req)
 	if localResp != nil {
 		if len(localResp.Violations) > 0 || mealAnalysisUnavailable(normalized) {
-			return localResp, nil
+			// Threshold findings are computed deterministically by AI_server
+			// independently of the KG food-safety lookup, so they stay valid
+			// when the KG part is not (Phase 10 RESEARCH Pitfall 5, D-05).
+			return preserveThresholdFindings(localResp, normalized), nil
 		}
 		if normalized.Enrichment == nil {
 			normalized.Enrichment = localResp.Enrichment
@@ -1817,6 +1820,86 @@ func (u *nutritionUseCase) AnalyzeMeal(ctx context.Context, userID uuid.UUID, re
 	return normalized, nil
 }
 
+const nutrientThresholdViolationType = "nutrient_threshold"
+
+// preserveThresholdFindings carries AI_server's nutrient-threshold findings
+// into the local-catalog response Go returns instead of the AI response.
+// Only nutrient_threshold violations are carried: every other AI violation
+// is untrusted in this branch, which is why the fallback exists. The status
+// is escalated worst-wins (APPROVED < WARNING < REJECTED, D-05): a CRITICAL
+// threshold violation implies REJECTED, any other at least WARNING. Without
+// threshold data, local is returned unchanged.
+func preserveThresholdFindings(local, ai *domain.AnalyzeMealResponse) *domain.AnalyzeMealResponse {
+	if local == nil || ai == nil {
+		return local
+	}
+	var carried []domain.MealViolation
+	for _, violation := range ai.Violations {
+		if violation.ViolationType == nutrientThresholdViolationType {
+			carried = append(carried, violation)
+		}
+	}
+	if len(carried) == 0 && len(ai.NutrientResults) == 0 && len(ai.MassResolutions) == 0 {
+		return local
+	}
+
+	out := *local
+	out.Violations = append(make([]domain.MealViolation, 0, len(local.Violations)+len(carried)), local.Violations...)
+	out.EvidencePath = append(make([]domain.MealEvidencePath, 0, len(local.EvidencePath)+len(carried)), local.EvidencePath...)
+
+	seen := make(map[string]bool, len(out.Violations))
+	for _, violation := range out.Violations {
+		seen[violation.Description] = true
+	}
+	status := out.Status
+	for _, violation := range carried {
+		if seen[violation.Description] {
+			continue
+		}
+		seen[violation.Description] = true
+		out.Violations = append(out.Violations, violation)
+		out.EvidencePath = append(out.EvidencePath, domain.MealEvidencePath{
+			DiseaseID:       violation.ViolationType,
+			RuleDescription: violation.Description,
+			Nodes:           evidenceNodesForViolation(violation),
+		})
+		implied := "WARNING"
+		if normalizeMealRisk(violation.Severity) == "CRITICAL" {
+			implied = "REJECTED"
+		}
+		if mealStatusRank(implied) > mealStatusRank(status) {
+			status = implied
+		}
+	}
+	out.Status = status
+
+	if len(out.NutrientResults) == 0 && len(ai.NutrientResults) > 0 {
+		out.NutrientResults = append([]domain.NutrientThresholdResult(nil), ai.NutrientResults...)
+	}
+	if len(out.MassResolutions) == 0 && len(ai.MassResolutions) > 0 {
+		out.MassResolutions = append([]domain.MassResolution(nil), ai.MassResolutions...)
+	}
+	if out.Status == "REJECTED" {
+		// Mirrors AI_server, where a threshold REJECTED makes the meal unsafe.
+		out.Score.SafetyScore = 0
+		out.Score.ConstraintScore = 0
+	}
+	return normalizeAnalyzeMealResponse(&out)
+}
+
+func mealStatusRank(status string) int {
+	switch strings.ToUpper(strings.TrimSpace(status)) {
+	case "REJECTED":
+		return 3
+	case "WARNING":
+		return 2
+	case "APPROVED":
+		return 1
+	default:
+		return 0
+	}
+}
+
 // dailyIntakeForUser loads today's logged items for AI_server's daily-budget
 // evaluation. A repository error yields Present=false (AI_server treats the
 // consumed part as unknown), never an empty present day (Phase 10 RESEARCH
@@ -1824,6 +1907,10 @@ func (u *nutritionUseCase) AnalyzeMeal(ctx context.Context, userID uuid.UUID, re
 // treats bad values as unknown, never zero.
 func (u *nutritionUseCase) dailyIntakeForUser(ctx context.Context, userID uuid.UUID, now time.Time) *domain.DailyIntakeContext {
 	consumedDate := now.Format("2006-01-02")
+	if u.repo == nil {
+		// No diary source wired: intake is unknown, never an empty day.
+		return &domain.DailyIntakeContext{Present: false, ConsumedDate: consumedDate}
+	}
 	logs, err := u.repo.GetDailyLogs(ctx, userID, now)
 	if err != nil {
 		log.Printf("[AnalyzeMeal] daily intake unavailable, sending absent: %T", err)

@@ -3,6 +3,8 @@ package usecase_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -410,6 +412,196 @@ func TestAnalyzeMeal_RealEnrichmentSurvivesCatalogFallback(t *testing.T) {
 	}
 	if kgPort.lastReq.Candidate.FoodRefs[0].Name != "Green rice sweet dessert" {
 		t.Fatalf("expected resolved food name in FoodRefs, got %+v", kgPort.lastReq.Candidate.FoodRefs[0])
+	}
+}
+
+// --- Phase 10: threshold findings survive the local-catalog fallback ---
+
+func thresholdFloat(v float64) *float64 { return &v }
+
+func sodiumThresholdViolation(foodID, severity string) domain.MealViolation {
+	return domain.MealViolation{
+		ViolationType:    "nutrient_threshold",
+		Description:      "Sodium: projected 1800 mg today meets or exceeds your limit of 1500 mg",
+		Severity:         severity,
+		OffendingFoodIDs: []string{foodID},
+		NutrientID:       "sodium",
+		ProjectedMg:      thresholdFloat(1800),
+		ThresholdMg:      thresholdFloat(1500),
+	}
+}
+
+func sodiumNutrientResult(foodID, status string) domain.NutrientThresholdResult {
+	return domain.NutrientThresholdResult{
+		NutrientID:          "sodium",
+		Status:              status,
+		ThisMealMg:          thresholdFloat(1800),
+		ProjectedMg:         thresholdFloat(1800),
+		Complete:            true,
+		WarningMg:           1000,
+		CriticalMg:          1500,
+		ContributingFoodIDs: []string{foodID},
+	}
+}
+
+// kgFailureViolation is worded the way AI_server's MealValidationEngine
+// reports a food with no :Food node (meal_validation.py evaluate_candidate_meal:
+// "Failed to evaluate food {food_id}: {error}"), which is exactly what Go's
+// mealAnalysisUnavailable treats as a discard trigger.
+func kgFailureViolation(foodID string) domain.MealViolation {
+	return domain.MealViolation{
+		ViolationType:    "safety_violation",
+		Description:      fmt.Sprintf("Failed to evaluate food %s: Food %s not found in knowledge graph", foodID, foodID),
+		Severity:         "RISK_LEVEL_UNSPECIFIED",
+		OffendingFoodIDs: []string{foodID},
+	}
+}
+
+func greenRiceRepo(foodID uuid.UUID) *mockNutritionRepo {
+	return &mockNutritionRepo{foodsByID: map[uuid.UUID]domain.Food{
+		foodID: {ID: foodID, Name: "Green rice sweet dessert", NameVi: "Che com", Source: "VFA_DISH"},
+	}}
+}
+
+func analyzeWithKg(t *testing.T, repo *mockNutritionRepo, user *domain.User, kg *mockKgPort, foodID uuid.UUID) *domain.AnalyzeMealResponse {
+	t.Helper()
+	uc := usecase.NewNutritionUseCase(repo, nil, nil, nil, &mockWorkoutRepo{}, &mockUserRepo{user: user}, nil, kg, nil)
+	resp, err := uc.AnalyzeMeal(context.Background(), uuid.New(), &domain.AnalyzeMealRequest{
+		Candidate: domain.CandidateMeal{MealID: "manual-lunch", FoodIDs: []string{foodID.String()}, MealType: "lunch"},
+	})
+	if err != nil {
+		t.Fatalf("AnalyzeMeal: %v", err)
+	}
+	return resp
+}
+
+func violationsOfType(resp *domain.AnalyzeMealResponse, violationType string) []domain.MealViolation {
+	var out []domain.MealViolation
+	for _, v := range resp.Violations {
+		if v.ViolationType == violationType {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+func TestAnalyzeMeal_ThresholdSurvivesLocalViolation(t *testing.T) {
+	foodID := uuid.New()
+	repo := &mockNutritionRepo{foodsByID: map[uuid.UUID]domain.Food{
+		foodID: {ID: foodID, Name: "Pho Thin", NameVi: "Pho Thin", Source: "VFA_DISH"},
+	}}
+	kg := &mockKgPort{analyzeMealResp: &domain.AnalyzeMealResponse{
+		Status:          "WARNING",
+		Violations:      []domain.MealViolation{sodiumThresholdViolation(foodID.String(), "RISK_LEVEL_HIGH")},
+		NutrientResults: []domain.NutrientThresholdResult{sodiumNutrientResult(foodID.String(), "WARNING")},
+	}}
+	resp := analyzeWithKg(t, repo, &domain.User{TDEE: 2000, DietaryPreference: "vegetarian"}, kg, foodID)
+
+	if resp.Status != "REJECTED" {
+		t.Fatalf("expected local REJECTED to win, got %s", resp.Status)
+	}
+	if len(violationsOfType(resp, "diet_vegetarian")) == 0 {
+		t.Fatalf("expected the local diet_vegetarian violation, got %+v", resp.Violations)
+	}
+	threshold := violationsOfType(resp, "nutrient_threshold")
+	if len(threshold) != 1 || threshold[0].NutrientID != "sodium" {
+		t.Fatalf("expected the AI threshold violation carried over, got %+v", resp.Violations)
+	}
+	if len(resp.NutrientResults) != 1 || resp.NutrientResults[0].NutrientID != "sodium" {
+		t.Fatalf("expected AI nutrient results carried over, got %+v", resp.NutrientResults)
+	}
+	foundEvidence := false
+	for _, e := range resp.EvidencePath {
+		if e.DiseaseID == "nutrient_threshold" {
+			foundEvidence = true
+		}
+	}
+	if !foundEvidence {
+		t.Fatalf("expected a nutrient_threshold evidence path, got %+v", resp.EvidencePath)
+	}
+}
+
+func TestAnalyzeMeal_ThresholdSurvivesUnavailableAI(t *testing.T) {
+	foodID := uuid.New()
+	kg := &mockKgPort{analyzeMealResp: &domain.AnalyzeMealResponse{
+		Status: "REJECTED",
+		Violations: []domain.MealViolation{
+			kgFailureViolation(foodID.String()),
+			sodiumThresholdViolation(foodID.String(), "RISK_LEVEL_CRITICAL"),
+		},
+		NutrientResults: []domain.NutrientThresholdResult{sodiumNutrientResult(foodID.String(), "CRITICAL")},
+	}}
+	resp := analyzeWithKg(t, greenRiceRepo(foodID), &domain.User{TDEE: 2000}, kg, foodID)
+
+	if resp.Status != "REJECTED" || resp.Safe || resp.HighestRisk != "CRITICAL" {
+		t.Fatalf("expected REJECTED/unsafe/CRITICAL, got status=%s safe=%v highest=%s", resp.Status, resp.Safe, resp.HighestRisk)
+	}
+	if resp.Score.SafetyScore != 0 || resp.Score.ConstraintScore != 0 {
+		t.Fatalf("expected zero safety/constraint scores on REJECTED, got %+v", resp.Score)
+	}
+	if len(violationsOfType(resp, "nutrient_threshold")) != 1 {
+		t.Fatalf("expected the threshold violation carried over, got %+v", resp.Violations)
+	}
+	if len(violationsOfType(resp, "safety_violation")) != 0 {
+		t.Fatalf("the untrusted KG-failure violation must not be carried over, got %+v", resp.Violations)
+	}
+	if len(resp.NutrientResults) != 1 || resp.NutrientResults[0].Status != "CRITICAL" {
+		t.Fatalf("expected AI nutrient results preserved, got %+v", resp.NutrientResults)
+	}
+}
+
+func TestAnalyzeMeal_ThresholdWarningEscalatesLocalApproval(t *testing.T) {
+	foodID := uuid.New()
+	kg := &mockKgPort{analyzeMealResp: &domain.AnalyzeMealResponse{
+		Status: "WARNING",
+		Violations: []domain.MealViolation{
+			kgFailureViolation(foodID.String()),
+			sodiumThresholdViolation(foodID.String(), "RISK_LEVEL_MEDIUM"),
+		},
+		NutrientResults: []domain.NutrientThresholdResult{sodiumNutrientResult(foodID.String(), "WARNING")},
+	}}
+	resp := analyzeWithKg(t, greenRiceRepo(foodID), &domain.User{TDEE: 2000}, kg, foodID)
+
+	if resp.Status != "WARNING" || resp.Safe {
+		t.Fatalf("expected WARNING/unsafe, got status=%s safe=%v", resp.Status, resp.Safe)
+	}
+	if len(violationsOfType(resp, "nutrient_threshold")) != 1 || len(violationsOfType(resp, "safety_violation")) != 0 {
+		t.Fatalf("expected only the threshold violation carried over, got %+v", resp.Violations)
+	}
+}
+
+// TestAnalyzeMeal_NilRepoSendsAbsentIntake: a usecase without a nutrition
+// repository (the delivery-test wiring) must not panic and must send today's
+// intake as absent, never as an empty present day.
+func TestAnalyzeMeal_NilRepoSendsAbsentIntake(t *testing.T) {
+	kg := &mockKgPort{analyzeMealResp: &domain.AnalyzeMealResponse{Status: "APPROVED"}}
+	uc := usecase.NewNutritionUseCase(nil, nil, nil, nil, nil, &mockUserRepo{user: &domain.User{}}, nil, kg, nil)
+	if _, err := uc.AnalyzeMeal(context.Background(), uuid.New(), &domain.AnalyzeMealRequest{
+		Candidate: domain.CandidateMeal{MealID: "m", FoodIDs: []string{"shrimp"}},
+	}); err != nil {
+		t.Fatalf("AnalyzeMeal: %v", err)
+	}
+	intake := kg.lastReq.Candidate.DailyIntake
+	if intake == nil || intake.Present || len(intake.Items) != 0 {
+		t.Fatalf("expected present=false with no items, got %+v", intake)
+	}
+}
+
+// TestAnalyzeMeal_UnavailableAIWithoutThresholdsUnchanged: with no threshold
+// data, the discard path returns exactly what the AI-error fallback returns.
+func TestAnalyzeMeal_UnavailableAIWithoutThresholdsUnchanged(t *testing.T) {
+	foodID := uuid.New()
+	unavailable := &mockKgPort{analyzeMealResp: &domain.AnalyzeMealResponse{
+		Status:     "REJECTED",
+		Violations: []domain.MealViolation{kgFailureViolation(foodID.String())},
+	}}
+	got := analyzeWithKg(t, greenRiceRepo(foodID), &domain.User{TDEE: 2000}, unavailable, foodID)
+
+	failed := &mockKgPort{analyzeMealErr: errors.New("AI AnalyzeMeal failed")}
+	want := analyzeWithKg(t, greenRiceRepo(foodID), &domain.User{TDEE: 2000}, failed, foodID)
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unavailable-AI response without thresholds changed:\n got %+v\nwant %+v", got, want)
 	}
 }
 
