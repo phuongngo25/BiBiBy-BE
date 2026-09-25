@@ -20,6 +20,7 @@ type mockNutritionRepo struct {
 	waterAmount      int
 	waterDateQueried time.Time
 	foodsByID        map[uuid.UUID]domain.Food
+	dailyLogsErr     error
 }
 
 func (m *mockNutritionRepo) GetMealLogForUpdate(ctx context.Context, userID uuid.UUID, logID uuid.UUID) (*domain.MealLog, error) {
@@ -61,6 +62,9 @@ func (m *mockNutritionRepo) UpdateFoodServingSize(ctx context.Context, foodID uu
 }
 func (m *mockNutritionRepo) LogMeal(ctx context.Context, log *domain.MealLog) error { return nil }
 func (m *mockNutritionRepo) GetDailyLogs(ctx context.Context, userID uuid.UUID, date time.Time) ([]domain.MealLog, error) {
+	if m.dailyLogsErr != nil {
+		return nil, m.dailyLogsErr
+	}
 	return m.logs, nil
 }
 func (m *mockNutritionRepo) GetWeeklyConsumed(_ context.Context, _ uuid.UUID, _ int) (map[string]float64, error) {

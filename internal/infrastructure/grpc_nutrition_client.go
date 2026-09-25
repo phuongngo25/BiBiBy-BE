@@ -169,25 +169,58 @@ func (g *grpcNutritionClient) AnalyzeMeal(ctx context.Context, req *domain.Analy
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	foodRefs := make([]*pb.FoodRef, len(req.Candidate.FoodRefs))
-	for i, ref := range req.Candidate.FoodRefs {
-		foodRefs[i] = &pb.FoodRef{FoodId: ref.FoodID, Name: ref.Name, NameVi: ref.NameVi}
-	}
-
 	resp, err := g.client.AnalyzeMeal(reqCtx, &pb.AnalyzeMealRequest{
-		Meta: &commonpb.RequestMeta{RequestId: generateRequestID()},
-		Candidate: &pb.CandidateMeal{
-			MealId:         req.Candidate.MealID,
-			FoodIds:        req.Candidate.FoodIDs,
-			MealType:       req.Candidate.MealType,
-			Ingredients:    req.Candidate.Ingredients,
-			Categories:     req.Candidate.Categories,
-			ProteinSources: req.Candidate.ProteinSources,
-			FoodRefs:       foodRefs,
-		},
+		Meta:      &commonpb.RequestMeta{RequestId: generateRequestID()},
+		Candidate: buildPbCandidateMeal(req.Candidate),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("AI AnalyzeMeal failed: %w", err)
+	}
+
+	return mapPbAnalyzeMealResponse(resp), nil
+}
+
+// buildPbCandidateMeal maps a domain candidate to its wire form. It is pure:
+// every optional amount is copied into a fresh pointer, and an unset amount
+// stays unset (never 0.0), so AI_server can tell "unknown" from "zero".
+func buildPbCandidateMeal(c domain.CandidateMeal) *pb.CandidateMeal {
+	foodRefs := make([]*pb.FoodRef, len(c.FoodRefs))
+	for i, ref := range c.FoodRefs {
+		foodRefs[i] = &pb.FoodRef{FoodId: ref.FoodID, Name: ref.Name, NameVi: ref.NameVi}
+	}
+
+	candidate := &pb.CandidateMeal{
+		MealId:         c.MealID,
+		FoodIds:        c.FoodIDs,
+		MealType:       c.MealType,
+		Ingredients:    c.Ingredients,
+		Categories:     c.Categories,
+		ProteinSources: c.ProteinSources,
+		FoodRefs:       foodRefs,
+	}
+
+	// nil DailyIntake (the planner path) leaves the field unset: AI_server
+	// reads "absent" as UNKNOWN consumption, never as an empty day.
+	if c.DailyIntake != nil {
+		items := make([]*pb.ConsumedFoodItem, len(c.DailyIntake.Items))
+		for i, item := range c.DailyIntake.Items {
+			items[i] = &pb.ConsumedFoodItem{FoodId: item.FoodID, QuantityG: copyFloat64Ptr(item.QuantityG)}
+		}
+		candidate.DailyIntake = &pb.DailyIntakeContext{
+			Present:      c.DailyIntake.Present,
+			Items:        items,
+			ConsumedDate: c.DailyIntake.ConsumedDate,
+		}
+	}
+
+	return candidate
+}
+
+// mapPbAnalyzeMealResponse maps the wire response to the domain response.
+// It is pure and nil-safe: a nil response maps to an empty, non-nil value.
+func mapPbAnalyzeMealResponse(resp *pb.AnalyzeMealResponse) *domain.AnalyzeMealResponse {
+	if resp == nil {
+		return &domain.AnalyzeMealResponse{}
 	}
 
 	violations := make([]domain.MealViolation, len(resp.Violations))
@@ -197,6 +230,9 @@ func (g *grpcNutritionClient) AnalyzeMeal(ctx context.Context, req *domain.Analy
 			Description:      v.Description,
 			Severity:         v.Severity.String(),
 			OffendingFoodIDs: v.OffendingFoodIds,
+			NutrientID:       v.GetNutrientId(),
+			ProjectedMg:      copyFloat64Ptr(v.ProjectedMg),
+			ThresholdMg:      copyFloat64Ptr(v.ThresholdMg),
 		}
 	}
 
@@ -250,13 +286,50 @@ func (g *grpcNutritionClient) AnalyzeMeal(ctx context.Context, req *domain.Analy
 		}
 	}
 
+	// Left nil when AI_server sent none, so `omitempty` keeps the
+	// pre-Phase-10 JSON shape.
+	var nutrientResults []domain.NutrientThresholdResult
+	if len(resp.NutrientResults) > 0 {
+		nutrientResults = make([]domain.NutrientThresholdResult, 0, len(resp.NutrientResults))
+		for _, r := range resp.NutrientResults {
+			if r == nil {
+				continue
+			}
+			nutrientResults = append(nutrientResults, domain.NutrientThresholdResult{
+				NutrientID:             r.NutrientId,
+				Status:                 r.Status,
+				ThisMealMg:             copyFloat64Ptr(r.ThisMealMg),
+				ConsumedTodayMg:        copyFloat64Ptr(r.ConsumedTodayMg),
+				ProjectedMg:            copyFloat64Ptr(r.ProjectedMg),
+				Complete:               r.Complete,
+				WarningMg:              r.WarningMg,
+				CriticalMg:             r.CriticalMg,
+				DiseaseOverride:        r.DiseaseOverride,
+				CappedNonAuthoritative: r.CappedNonAuthoritative,
+				ContributingFoodIDs:    append(make([]string, 0, len(r.ContributingFoodIds)), r.ContributingFoodIds...),
+				Note:                   r.Note,
+			})
+		}
+	}
+
 	return &domain.AnalyzeMealResponse{
-		Status:     resp.Status.String(),
-		Score:      score,
-		Violations: violations,
-		Fixes:      fixes,
-		Enrichment: enrichment,
-	}, nil
+		Status:          resp.Status.String(),
+		Score:           score,
+		Violations:      violations,
+		Fixes:           fixes,
+		Enrichment:      enrichment,
+		NutrientResults: nutrientResults,
+	}
+}
+
+// copyFloat64Ptr returns a fresh pointer to a copy of *v, or nil when v is
+// nil, so mapped values never alias their source and unset stays unset.
+func copyFloat64Ptr(v *float64) *float64 {
+	if v == nil {
+		return nil
+	}
+	c := *v
+	return &c
 }
 
 // ─── Thresholds ──────────────────────────────────────────────────

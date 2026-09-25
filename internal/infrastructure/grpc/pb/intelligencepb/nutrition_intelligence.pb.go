@@ -123,6 +123,61 @@ func (MealApprovalStatus) EnumDescriptor() ([]byte, []int) {
 	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{1}
 }
 
+type MassSource int32
+
+const (
+	MassSource_MASS_SOURCE_UNSPECIFIED       MassSource = 0
+	MassSource_MASS_SOURCE_CV_ESTIMATED      MassSource = 1
+	MassSource_MASS_SOURCE_USER_ENTERED      MassSource = 2
+	MassSource_MASS_SOURCE_ESTIMATED_SERVING MassSource = 3
+	MassSource_MASS_SOURCE_MEASURED          MassSource = 4
+)
+
+// Enum value maps for MassSource.
+var (
+	MassSource_name = map[int32]string{
+		0: "MASS_SOURCE_UNSPECIFIED",
+		1: "MASS_SOURCE_CV_ESTIMATED",
+		2: "MASS_SOURCE_USER_ENTERED",
+		3: "MASS_SOURCE_ESTIMATED_SERVING",
+		4: "MASS_SOURCE_MEASURED",
+	}
+	MassSource_value = map[string]int32{
+		"MASS_SOURCE_UNSPECIFIED":       0,
+		"MASS_SOURCE_CV_ESTIMATED":      1,
+		"MASS_SOURCE_USER_ENTERED":      2,
+		"MASS_SOURCE_ESTIMATED_SERVING": 3,
+		"MASS_SOURCE_MEASURED":          4,
+	}
+)
+
+func (x MassSource) Enum() *MassSource {
+	p := new(MassSource)
+	*p = x
+	return p
+}
+
+func (x MassSource) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MassSource) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_nutrition_intelligence_proto_enumTypes[2].Descriptor()
+}
+
+func (MassSource) Type() protoreflect.EnumType {
+	return &file_v1_nutrition_intelligence_proto_enumTypes[2]
+}
+
+func (x MassSource) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MassSource.Descriptor instead.
+func (MassSource) EnumDescriptor() ([]byte, []int) {
+	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{2}
+}
+
 type HealthCheckRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Meta          *commonpb.RequestMeta  `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
@@ -1945,7 +2000,13 @@ type CandidateMeal struct {
 	// catalog table of its own, so Go (which already has domain.Food loaded)
 	// passes names through here for LLM enrichment prompts instead of AI_server
 	// reaching back across services for a single string per food.
-	FoodRefs      []*FoodRef `protobuf:"bytes,7,rep,name=food_refs,json=foodRefs,proto3" json:"food_refs,omitempty"`
+	FoodRefs []*FoodRef `protobuf:"bytes,7,rep,name=food_refs,json=foodRefs,proto3" json:"food_refs,omitempty"`
+	// Phase 10 (additive): per-food mass inputs, one entry per food_id. Each
+	// mass source stays in its own field and is never merged (D-02).
+	FoodMasses []*FoodMassInput `protobuf:"bytes,8,rep,name=food_masses,json=foodMasses,proto3" json:"food_masses,omitempty"`
+	// Phase 10 (additive): today's already-logged items (D-01, D-13). Unset or
+	// present=false means today's consumed totals are UNKNOWN, never zero.
+	DailyIntake   *DailyIntakeContext `protobuf:"bytes,9,opt,name=daily_intake,json=dailyIntake,proto3" json:"daily_intake,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2025,6 +2086,20 @@ func (x *CandidateMeal) GetProteinSources() []string {
 func (x *CandidateMeal) GetFoodRefs() []*FoodRef {
 	if x != nil {
 		return x.FoodRefs
+	}
+	return nil
+}
+
+func (x *CandidateMeal) GetFoodMasses() []*FoodMassInput {
+	if x != nil {
+		return x.FoodMasses
+	}
+	return nil
+}
+
+func (x *CandidateMeal) GetDailyIntake() *DailyIntakeContext {
+	if x != nil {
+		return x.DailyIntake
 	}
 	return nil
 }
@@ -2231,8 +2306,13 @@ type MealViolation struct {
 	Description      string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
 	Severity         commonpb.RiskLevel     `protobuf:"varint,3,opt,name=severity,proto3,enum=nutrix.common.v1.RiskLevel" json:"severity,omitempty"`
 	OffendingFoodIds []string               `protobuf:"bytes,4,rep,name=offending_food_ids,json=offendingFoodIds,proto3" json:"offending_food_ids,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Phase 10 (additive): set only for violation_type "nutrient_threshold" (D-06).
+	// Amounts are mg; optional fields are unset when not known.
+	NutrientId    string   `protobuf:"bytes,5,opt,name=nutrient_id,json=nutrientId,proto3" json:"nutrient_id,omitempty"`
+	ProjectedMg   *float64 `protobuf:"fixed64,6,opt,name=projected_mg,json=projectedMg,proto3,oneof" json:"projected_mg,omitempty"`
+	ThresholdMg   *float64 `protobuf:"fixed64,7,opt,name=threshold_mg,json=thresholdMg,proto3,oneof" json:"threshold_mg,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MealViolation) Reset() {
@@ -2291,6 +2371,27 @@ func (x *MealViolation) GetOffendingFoodIds() []string {
 		return x.OffendingFoodIds
 	}
 	return nil
+}
+
+func (x *MealViolation) GetNutrientId() string {
+	if x != nil {
+		return x.NutrientId
+	}
+	return ""
+}
+
+func (x *MealViolation) GetProjectedMg() float64 {
+	if x != nil && x.ProjectedMg != nil {
+		return *x.ProjectedMg
+	}
+	return 0
+}
+
+func (x *MealViolation) GetThresholdMg() float64 {
+	if x != nil && x.ThresholdMg != nil {
+		return *x.ThresholdMg
+	}
+	return 0
 }
 
 type AnalyzeMealRequest struct {
@@ -2356,9 +2457,14 @@ type AnalyzeMealResponse struct {
 	// in the candidate (mirrors domain.MealEnrichment on the Go side, which is
 	// already a single value, not a list — one per validate call, matching how
 	// meal-validate is invoked per-food today).
-	Enrichment    *MealEnrichment `protobuf:"bytes,6,opt,name=enrichment,proto3" json:"enrichment,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Enrichment *MealEnrichment `protobuf:"bytes,6,opt,name=enrichment,proto3" json:"enrichment,omitempty"`
+	// Phase 10 (additive): per-nutrient threshold evaluation results, sorted by
+	// nutrient_id (FR-3.3).
+	NutrientResults []*NutrientThresholdResult `protobuf:"bytes,7,rep,name=nutrient_results,json=nutrientResults,proto3" json:"nutrient_results,omitempty"`
+	// Phase 10 (additive): per-food mass provenance chosen by AI_server (D-02, D-08).
+	MassResolutions []*MassResolution `protobuf:"bytes,8,rep,name=mass_resolutions,json=massResolutions,proto3" json:"mass_resolutions,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *AnalyzeMealResponse) Reset() {
@@ -2429,6 +2535,20 @@ func (x *AnalyzeMealResponse) GetFixes() []*MealFixSuggestion {
 func (x *AnalyzeMealResponse) GetEnrichment() *MealEnrichment {
 	if x != nil {
 		return x.Enrichment
+	}
+	return nil
+}
+
+func (x *AnalyzeMealResponse) GetNutrientResults() []*NutrientThresholdResult {
+	if x != nil {
+		return x.NutrientResults
+	}
+	return nil
+}
+
+func (x *AnalyzeMealResponse) GetMassResolutions() []*MassResolution {
+	if x != nil {
+		return x.MassResolutions
 	}
 	return nil
 }
@@ -2567,6 +2687,444 @@ func (x *MealEnrichment) GetConfidence() float64 {
 		return x.Confidence
 	}
 	return 0
+}
+
+type FoodMassInput struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	FoodId string                 `protobuf:"bytes,1,opt,name=food_id,json=foodId,proto3" json:"food_id,omitempty"`
+	// Actual consumed mass. Unset means absent (never 0 g).
+	ActualMassG *float64 `protobuf:"fixed64,2,opt,name=actual_mass_g,json=actualMassG,proto3,oneof" json:"actual_mass_g,omitempty"`
+	// Provenance of actual_mass_g. Only MASS_SOURCE_CV_ESTIMATED or
+	// MASS_SOURCE_MEASURED are honoured; any other value ignores actual_mass_g.
+	ActualMassSource MassSource `protobuf:"varint,3,opt,name=actual_mass_source,json=actualMassSource,proto3,enum=nutrix.intelligence.v1.MassSource" json:"actual_mass_source,omitempty"`
+	// Mass the user typed in. Unset means absent (never 0 g).
+	UserEnteredMassG *float64 `protobuf:"fixed64,4,opt,name=user_entered_mass_g,json=userEnteredMassG,proto3,oneof" json:"user_entered_mass_g,omitempty"`
+	// Client-supplied serving estimate. Never authoritative: it can justify at
+	// most a WARNING, never a REJECTED verdict (D-12).
+	EstimatedServingG *float64 `protobuf:"fixed64,5,opt,name=estimated_serving_g,json=estimatedServingG,proto3,oneof" json:"estimated_serving_g,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *FoodMassInput) Reset() {
+	*x = FoodMassInput{}
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FoodMassInput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FoodMassInput) ProtoMessage() {}
+
+func (x *FoodMassInput) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FoodMassInput.ProtoReflect.Descriptor instead.
+func (*FoodMassInput) Descriptor() ([]byte, []int) {
+	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *FoodMassInput) GetFoodId() string {
+	if x != nil {
+		return x.FoodId
+	}
+	return ""
+}
+
+func (x *FoodMassInput) GetActualMassG() float64 {
+	if x != nil && x.ActualMassG != nil {
+		return *x.ActualMassG
+	}
+	return 0
+}
+
+func (x *FoodMassInput) GetActualMassSource() MassSource {
+	if x != nil {
+		return x.ActualMassSource
+	}
+	return MassSource_MASS_SOURCE_UNSPECIFIED
+}
+
+func (x *FoodMassInput) GetUserEnteredMassG() float64 {
+	if x != nil && x.UserEnteredMassG != nil {
+		return *x.UserEnteredMassG
+	}
+	return 0
+}
+
+func (x *FoodMassInput) GetEstimatedServingG() float64 {
+	if x != nil && x.EstimatedServingG != nil {
+		return *x.EstimatedServingG
+	}
+	return 0
+}
+
+type ConsumedFoodItem struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	FoodId string                 `protobuf:"bytes,1,opt,name=food_id,json=foodId,proto3" json:"food_id,omitempty"`
+	// Grams consumed. Unset means unknown (never 0 g).
+	QuantityG     *float64 `protobuf:"fixed64,2,opt,name=quantity_g,json=quantityG,proto3,oneof" json:"quantity_g,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConsumedFoodItem) Reset() {
+	*x = ConsumedFoodItem{}
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConsumedFoodItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConsumedFoodItem) ProtoMessage() {}
+
+func (x *ConsumedFoodItem) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConsumedFoodItem.ProtoReflect.Descriptor instead.
+func (*ConsumedFoodItem) Descriptor() ([]byte, []int) {
+	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *ConsumedFoodItem) GetFoodId() string {
+	if x != nil {
+		return x.FoodId
+	}
+	return ""
+}
+
+func (x *ConsumedFoodItem) GetQuantityG() float64 {
+	if x != nil && x.QuantityG != nil {
+		return *x.QuantityG
+	}
+	return 0
+}
+
+type DailyIntakeContext struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// false (or this message unset) means today's consumed totals are UNKNOWN,
+	// never zero (Pitfall 2). true with no items means a genuinely empty day.
+	Present       bool                `protobuf:"varint,1,opt,name=present,proto3" json:"present,omitempty"`
+	Items         []*ConsumedFoodItem `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
+	ConsumedDate  string              `protobuf:"bytes,3,opt,name=consumed_date,json=consumedDate,proto3" json:"consumed_date,omitempty"` // YYYY-MM-DD
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DailyIntakeContext) Reset() {
+	*x = DailyIntakeContext{}
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DailyIntakeContext) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DailyIntakeContext) ProtoMessage() {}
+
+func (x *DailyIntakeContext) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DailyIntakeContext.ProtoReflect.Descriptor instead.
+func (*DailyIntakeContext) Descriptor() ([]byte, []int) {
+	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *DailyIntakeContext) GetPresent() bool {
+	if x != nil {
+		return x.Present
+	}
+	return false
+}
+
+func (x *DailyIntakeContext) GetItems() []*ConsumedFoodItem {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *DailyIntakeContext) GetConsumedDate() string {
+	if x != nil {
+		return x.ConsumedDate
+	}
+	return ""
+}
+
+// Response-only: the mass AI_server chose for one food (D-08). The best
+// choice is used for display and WARNING-level results; only the
+// authoritative choice can justify REJECTED (D-09, D-10).
+type MassResolution struct {
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	FoodId                  string                 `protobuf:"bytes,1,opt,name=food_id,json=foodId,proto3" json:"food_id,omitempty"`
+	MassG                   *float64               `protobuf:"fixed64,2,opt,name=mass_g,json=massG,proto3,oneof" json:"mass_g,omitempty"`
+	MassSource              MassSource             `protobuf:"varint,3,opt,name=mass_source,json=massSource,proto3,enum=nutrix.intelligence.v1.MassSource" json:"mass_source,omitempty"`
+	Hc04Approved            bool                   `protobuf:"varint,4,opt,name=hc04_approved,json=hc04Approved,proto3" json:"hc04_approved,omitempty"`
+	DecisionAuthority       bool                   `protobuf:"varint,5,opt,name=decision_authority,json=decisionAuthority,proto3" json:"decision_authority,omitempty"`
+	AuthoritativeMassG      *float64               `protobuf:"fixed64,6,opt,name=authoritative_mass_g,json=authoritativeMassG,proto3,oneof" json:"authoritative_mass_g,omitempty"`
+	AuthoritativeMassSource MassSource             `protobuf:"varint,7,opt,name=authoritative_mass_source,json=authoritativeMassSource,proto3,enum=nutrix.intelligence.v1.MassSource" json:"authoritative_mass_source,omitempty"`
+	Note                    string                 `protobuf:"bytes,8,opt,name=note,proto3" json:"note,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
+}
+
+func (x *MassResolution) Reset() {
+	*x = MassResolution{}
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MassResolution) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MassResolution) ProtoMessage() {}
+
+func (x *MassResolution) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MassResolution.ProtoReflect.Descriptor instead.
+func (*MassResolution) Descriptor() ([]byte, []int) {
+	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *MassResolution) GetFoodId() string {
+	if x != nil {
+		return x.FoodId
+	}
+	return ""
+}
+
+func (x *MassResolution) GetMassG() float64 {
+	if x != nil && x.MassG != nil {
+		return *x.MassG
+	}
+	return 0
+}
+
+func (x *MassResolution) GetMassSource() MassSource {
+	if x != nil {
+		return x.MassSource
+	}
+	return MassSource_MASS_SOURCE_UNSPECIFIED
+}
+
+func (x *MassResolution) GetHc04Approved() bool {
+	if x != nil {
+		return x.Hc04Approved
+	}
+	return false
+}
+
+func (x *MassResolution) GetDecisionAuthority() bool {
+	if x != nil {
+		return x.DecisionAuthority
+	}
+	return false
+}
+
+func (x *MassResolution) GetAuthoritativeMassG() float64 {
+	if x != nil && x.AuthoritativeMassG != nil {
+		return *x.AuthoritativeMassG
+	}
+	return 0
+}
+
+func (x *MassResolution) GetAuthoritativeMassSource() MassSource {
+	if x != nil {
+		return x.AuthoritativeMassSource
+	}
+	return MassSource_MASS_SOURCE_UNSPECIFIED
+}
+
+func (x *MassResolution) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
+// Response-only: one per evaluated nutrient. status is one of SAFE, WARNING,
+// CRITICAL, UNKNOWN. Amounts are mg; optional amounts are unset when no
+// contribution is known, and complete says whether every contribution
+// (today's intake and every food of this meal) was known.
+type NutrientThresholdResult struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	NutrientId      string                 `protobuf:"bytes,1,opt,name=nutrient_id,json=nutrientId,proto3" json:"nutrient_id,omitempty"`
+	Status          string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	ThisMealMg      *float64               `protobuf:"fixed64,3,opt,name=this_meal_mg,json=thisMealMg,proto3,oneof" json:"this_meal_mg,omitempty"`
+	ConsumedTodayMg *float64               `protobuf:"fixed64,4,opt,name=consumed_today_mg,json=consumedTodayMg,proto3,oneof" json:"consumed_today_mg,omitempty"`
+	ProjectedMg     *float64               `protobuf:"fixed64,5,opt,name=projected_mg,json=projectedMg,proto3,oneof" json:"projected_mg,omitempty"`
+	Complete        bool                   `protobuf:"varint,6,opt,name=complete,proto3" json:"complete,omitempty"`
+	WarningMg       float64                `protobuf:"fixed64,7,opt,name=warning_mg,json=warningMg,proto3" json:"warning_mg,omitempty"`
+	CriticalMg      float64                `protobuf:"fixed64,8,opt,name=critical_mg,json=criticalMg,proto3" json:"critical_mg,omitempty"`
+	DiseaseOverride bool                   `protobuf:"varint,9,opt,name=disease_override,json=diseaseOverride,proto3" json:"disease_override,omitempty"`
+	// true when a critical breach was computed only from non-authoritative
+	// mass and was therefore capped at WARNING (D-09).
+	CappedNonAuthoritative bool     `protobuf:"varint,10,opt,name=capped_non_authoritative,json=cappedNonAuthoritative,proto3" json:"capped_non_authoritative,omitempty"`
+	ContributingFoodIds    []string `protobuf:"bytes,11,rep,name=contributing_food_ids,json=contributingFoodIds,proto3" json:"contributing_food_ids,omitempty"`
+	Note                   string   `protobuf:"bytes,12,opt,name=note,proto3" json:"note,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *NutrientThresholdResult) Reset() {
+	*x = NutrientThresholdResult{}
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NutrientThresholdResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NutrientThresholdResult) ProtoMessage() {}
+
+func (x *NutrientThresholdResult) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_nutrition_intelligence_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NutrientThresholdResult.ProtoReflect.Descriptor instead.
+func (*NutrientThresholdResult) Descriptor() ([]byte, []int) {
+	return file_v1_nutrition_intelligence_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *NutrientThresholdResult) GetNutrientId() string {
+	if x != nil {
+		return x.NutrientId
+	}
+	return ""
+}
+
+func (x *NutrientThresholdResult) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *NutrientThresholdResult) GetThisMealMg() float64 {
+	if x != nil && x.ThisMealMg != nil {
+		return *x.ThisMealMg
+	}
+	return 0
+}
+
+func (x *NutrientThresholdResult) GetConsumedTodayMg() float64 {
+	if x != nil && x.ConsumedTodayMg != nil {
+		return *x.ConsumedTodayMg
+	}
+	return 0
+}
+
+func (x *NutrientThresholdResult) GetProjectedMg() float64 {
+	if x != nil && x.ProjectedMg != nil {
+		return *x.ProjectedMg
+	}
+	return 0
+}
+
+func (x *NutrientThresholdResult) GetComplete() bool {
+	if x != nil {
+		return x.Complete
+	}
+	return false
+}
+
+func (x *NutrientThresholdResult) GetWarningMg() float64 {
+	if x != nil {
+		return x.WarningMg
+	}
+	return 0
+}
+
+func (x *NutrientThresholdResult) GetCriticalMg() float64 {
+	if x != nil {
+		return x.CriticalMg
+	}
+	return 0
+}
+
+func (x *NutrientThresholdResult) GetDiseaseOverride() bool {
+	if x != nil {
+		return x.DiseaseOverride
+	}
+	return false
+}
+
+func (x *NutrientThresholdResult) GetCappedNonAuthoritative() bool {
+	if x != nil {
+		return x.CappedNonAuthoritative
+	}
+	return false
+}
+
+func (x *NutrientThresholdResult) GetContributingFoodIds() []string {
+	if x != nil {
+		return x.ContributingFoodIds
+	}
+	return nil
+}
+
+func (x *NutrientThresholdResult) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
 }
 
 var File_v1_nutrition_intelligence_proto protoreflect.FileDescriptor
@@ -2727,7 +3285,7 @@ const file_v1_nutrition_intelligence_proto_rawDesc = "" +
 	"\vmacro_score\x18\x02 \x01(\x01R\n" +
 	"macroScore\x12/\n" +
 	"\x13micronutrient_score\x18\x03 \x01(\x01R\x12micronutrientScore\x12)\n" +
-	"\x10constraint_score\x18\x04 \x01(\x01R\x0fconstraintScore\"\x89\x02\n" +
+	"\x10constraint_score\x18\x04 \x01(\x01R\x0fconstraintScore\"\xa0\x03\n" +
 	"\rCandidateMeal\x12\x17\n" +
 	"\ameal_id\x18\x01 \x01(\tR\x06mealId\x12\x19\n" +
 	"\bfood_ids\x18\x02 \x03(\tR\afoodIds\x12\x1b\n" +
@@ -2737,7 +3295,10 @@ const file_v1_nutrition_intelligence_proto_rawDesc = "" +
 	"categories\x18\x05 \x03(\tR\n" +
 	"categories\x12'\n" +
 	"\x0fprotein_sources\x18\x06 \x03(\tR\x0eproteinSources\x12<\n" +
-	"\tfood_refs\x18\a \x03(\v2\x1f.nutrix.intelligence.v1.FoodRefR\bfoodRefs\"O\n" +
+	"\tfood_refs\x18\a \x03(\v2\x1f.nutrix.intelligence.v1.FoodRefR\bfoodRefs\x12F\n" +
+	"\vfood_masses\x18\b \x03(\v2%.nutrix.intelligence.v1.FoodMassInputR\n" +
+	"foodMasses\x12M\n" +
+	"\fdaily_intake\x18\t \x01(\v2*.nutrix.intelligence.v1.DailyIntakeContextR\vdailyIntake\"O\n" +
 	"\aFoodRef\x12\x17\n" +
 	"\afood_id\x18\x01 \x01(\tR\x06foodId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x17\n" +
@@ -2752,15 +3313,21 @@ const file_v1_nutrition_intelligence_proto_rawDesc = "" +
 	"\x11MealFixSuggestion\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12G\n" +
 	"\vreplacement\x18\x02 \x01(\v2%.nutrix.intelligence.v1.CandidateMealR\vreplacement\x12=\n" +
-	"\x06impact\x18\x03 \x01(\v2%.nutrix.intelligence.v1.MealFixImpactR\x06impact\"\xbf\x01\n" +
+	"\x06impact\x18\x03 \x01(\v2%.nutrix.intelligence.v1.MealFixImpactR\x06impact\"\xd2\x02\n" +
 	"\rMealViolation\x12%\n" +
 	"\x0eviolation_type\x18\x01 \x01(\tR\rviolationType\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x127\n" +
 	"\bseverity\x18\x03 \x01(\x0e2\x1b.nutrix.common.v1.RiskLevelR\bseverity\x12,\n" +
-	"\x12offending_food_ids\x18\x04 \x03(\tR\x10offendingFoodIds\"\x8c\x01\n" +
+	"\x12offending_food_ids\x18\x04 \x03(\tR\x10offendingFoodIds\x12\x1f\n" +
+	"\vnutrient_id\x18\x05 \x01(\tR\n" +
+	"nutrientId\x12&\n" +
+	"\fprojected_mg\x18\x06 \x01(\x01H\x00R\vprojectedMg\x88\x01\x01\x12&\n" +
+	"\fthreshold_mg\x18\a \x01(\x01H\x01R\vthresholdMg\x88\x01\x01B\x0f\n" +
+	"\r_projected_mgB\x0f\n" +
+	"\r_threshold_mg\"\x8c\x01\n" +
 	"\x12AnalyzeMealRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.nutrix.common.v1.RequestMetaR\x04meta\x12C\n" +
-	"\tcandidate\x18\x02 \x01(\v2%.nutrix.intelligence.v1.CandidateMealR\tcandidate\"\x95\x03\n" +
+	"\tcandidate\x18\x02 \x01(\v2%.nutrix.intelligence.v1.CandidateMealR\tcandidate\"\xc4\x04\n" +
 	"\x13AnalyzeMealResponse\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.nutrix.common.v1.RequestMetaR\x04meta\x12B\n" +
 	"\x06status\x18\x02 \x01(\x0e2*.nutrix.intelligence.v1.MealApprovalStatusR\x06status\x127\n" +
@@ -2771,7 +3338,9 @@ const file_v1_nutrition_intelligence_proto_rawDesc = "" +
 	"\x05fixes\x18\x05 \x03(\v2).nutrix.intelligence.v1.MealFixSuggestionR\x05fixes\x12F\n" +
 	"\n" +
 	"enrichment\x18\x06 \x01(\v2&.nutrix.intelligence.v1.MealEnrichmentR\n" +
-	"enrichment\"e\n" +
+	"enrichment\x12Z\n" +
+	"\x10nutrient_results\x18\a \x03(\v2/.nutrix.intelligence.v1.NutrientThresholdResultR\x0fnutrientResults\x12Q\n" +
+	"\x10mass_resolutions\x18\b \x03(\v2&.nutrix.intelligence.v1.MassResolutionR\x0fmassResolutions\"e\n" +
 	"\x14MealIngredientDetail\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\bamount_g\x18\x02 \x01(\x01R\aamountG\x12\x1e\n" +
@@ -2785,7 +3354,58 @@ const file_v1_nutrition_intelligence_proto_rawDesc = "" +
 	"\x06source\x18\x04 \x01(\tR\x06source\x12\x1e\n" +
 	"\n" +
 	"confidence\x18\x05 \x01(\x01R\n" +
-	"confidence*^\n" +
+	"confidence\"\xce\x02\n" +
+	"\rFoodMassInput\x12\x17\n" +
+	"\afood_id\x18\x01 \x01(\tR\x06foodId\x12'\n" +
+	"\ractual_mass_g\x18\x02 \x01(\x01H\x00R\vactualMassG\x88\x01\x01\x12P\n" +
+	"\x12actual_mass_source\x18\x03 \x01(\x0e2\".nutrix.intelligence.v1.MassSourceR\x10actualMassSource\x122\n" +
+	"\x13user_entered_mass_g\x18\x04 \x01(\x01H\x01R\x10userEnteredMassG\x88\x01\x01\x123\n" +
+	"\x13estimated_serving_g\x18\x05 \x01(\x01H\x02R\x11estimatedServingG\x88\x01\x01B\x10\n" +
+	"\x0e_actual_mass_gB\x16\n" +
+	"\x14_user_entered_mass_gB\x16\n" +
+	"\x14_estimated_serving_g\"^\n" +
+	"\x10ConsumedFoodItem\x12\x17\n" +
+	"\afood_id\x18\x01 \x01(\tR\x06foodId\x12\"\n" +
+	"\n" +
+	"quantity_g\x18\x02 \x01(\x01H\x00R\tquantityG\x88\x01\x01B\r\n" +
+	"\v_quantity_g\"\x93\x01\n" +
+	"\x12DailyIntakeContext\x12\x18\n" +
+	"\apresent\x18\x01 \x01(\bR\apresent\x12>\n" +
+	"\x05items\x18\x02 \x03(\v2(.nutrix.intelligence.v1.ConsumedFoodItemR\x05items\x12#\n" +
+	"\rconsumed_date\x18\x03 \x01(\tR\fconsumedDate\"\xad\x03\n" +
+	"\x0eMassResolution\x12\x17\n" +
+	"\afood_id\x18\x01 \x01(\tR\x06foodId\x12\x1a\n" +
+	"\x06mass_g\x18\x02 \x01(\x01H\x00R\x05massG\x88\x01\x01\x12C\n" +
+	"\vmass_source\x18\x03 \x01(\x0e2\".nutrix.intelligence.v1.MassSourceR\n" +
+	"massSource\x12#\n" +
+	"\rhc04_approved\x18\x04 \x01(\bR\fhc04Approved\x12-\n" +
+	"\x12decision_authority\x18\x05 \x01(\bR\x11decisionAuthority\x125\n" +
+	"\x14authoritative_mass_g\x18\x06 \x01(\x01H\x01R\x12authoritativeMassG\x88\x01\x01\x12^\n" +
+	"\x19authoritative_mass_source\x18\a \x01(\x0e2\".nutrix.intelligence.v1.MassSourceR\x17authoritativeMassSource\x12\x12\n" +
+	"\x04note\x18\b \x01(\tR\x04noteB\t\n" +
+	"\a_mass_gB\x17\n" +
+	"\x15_authoritative_mass_g\"\x93\x04\n" +
+	"\x17NutrientThresholdResult\x12\x1f\n" +
+	"\vnutrient_id\x18\x01 \x01(\tR\n" +
+	"nutrientId\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\x12%\n" +
+	"\fthis_meal_mg\x18\x03 \x01(\x01H\x00R\n" +
+	"thisMealMg\x88\x01\x01\x12/\n" +
+	"\x11consumed_today_mg\x18\x04 \x01(\x01H\x01R\x0fconsumedTodayMg\x88\x01\x01\x12&\n" +
+	"\fprojected_mg\x18\x05 \x01(\x01H\x02R\vprojectedMg\x88\x01\x01\x12\x1a\n" +
+	"\bcomplete\x18\x06 \x01(\bR\bcomplete\x12\x1d\n" +
+	"\n" +
+	"warning_mg\x18\a \x01(\x01R\twarningMg\x12\x1f\n" +
+	"\vcritical_mg\x18\b \x01(\x01R\n" +
+	"criticalMg\x12)\n" +
+	"\x10disease_override\x18\t \x01(\bR\x0fdiseaseOverride\x128\n" +
+	"\x18capped_non_authoritative\x18\n" +
+	" \x01(\bR\x16cappedNonAuthoritative\x122\n" +
+	"\x15contributing_food_ids\x18\v \x03(\tR\x13contributingFoodIds\x12\x12\n" +
+	"\x04note\x18\f \x01(\tR\x04noteB\x0f\n" +
+	"\r_this_meal_mgB\x14\n" +
+	"\x12_consumed_today_mgB\x0f\n" +
+	"\r_projected_mg*^\n" +
 	"\x18RecommendationReasonType\x12*\n" +
 	"&RECOMMENDATION_REASON_TYPE_UNSPECIFIED\x10\x00\x12\t\n" +
 	"\x05BOOST\x10\x01\x12\v\n" +
@@ -2794,7 +3414,14 @@ const file_v1_nutrition_intelligence_proto_rawDesc = "" +
 	" MEAL_APPROVAL_STATUS_UNSPECIFIED\x10\x00\x12\f\n" +
 	"\bAPPROVED\x10\x01\x12\v\n" +
 	"\aWARNING\x10\x02\x12\f\n" +
-	"\bREJECTED\x10\x032\xd3\a\n" +
+	"\bREJECTED\x10\x03*\xa2\x01\n" +
+	"\n" +
+	"MassSource\x12\x1b\n" +
+	"\x17MASS_SOURCE_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18MASS_SOURCE_CV_ESTIMATED\x10\x01\x12\x1c\n" +
+	"\x18MASS_SOURCE_USER_ENTERED\x10\x02\x12!\n" +
+	"\x1dMASS_SOURCE_ESTIMATED_SERVING\x10\x03\x12\x18\n" +
+	"\x14MASS_SOURCE_MEASURED\x10\x042\xd3\a\n" +
 	"\x1cNutritionIntelligenceService\x12f\n" +
 	"\vHealthCheck\x12*.nutrix.intelligence.v1.HealthCheckRequest\x1a+.nutrix.intelligence.v1.HealthCheckResponse\x12f\n" +
 	"\vAnalyzeFood\x12*.nutrix.intelligence.v1.AnalyzeFoodRequest\x1a+.nutrix.intelligence.v1.AnalyzeFoodResponse\x12\x81\x01\n" +
@@ -2817,119 +3444,133 @@ func file_v1_nutrition_intelligence_proto_rawDescGZIP() []byte {
 	return file_v1_nutrition_intelligence_proto_rawDescData
 }
 
-var file_v1_nutrition_intelligence_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_v1_nutrition_intelligence_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_v1_nutrition_intelligence_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_v1_nutrition_intelligence_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
 var file_v1_nutrition_intelligence_proto_goTypes = []any{
 	(RecommendationReasonType)(0),        // 0: nutrix.intelligence.v1.RecommendationReasonType
 	(MealApprovalStatus)(0),              // 1: nutrix.intelligence.v1.MealApprovalStatus
-	(*HealthCheckRequest)(nil),           // 2: nutrix.intelligence.v1.HealthCheckRequest
-	(*HealthCheckResponse)(nil),          // 3: nutrix.intelligence.v1.HealthCheckResponse
-	(*AnalyzeFoodRequest)(nil),           // 4: nutrix.intelligence.v1.AnalyzeFoodRequest
-	(*AnalyzeFoodResponse)(nil),          // 5: nutrix.intelligence.v1.AnalyzeFoodResponse
-	(*GetThresholdSnapshotRequest)(nil),  // 6: nutrix.intelligence.v1.GetThresholdSnapshotRequest
-	(*NutrientThresholdSnapshot)(nil),    // 7: nutrix.intelligence.v1.NutrientThresholdSnapshot
-	(*ThresholdSnapshot)(nil),            // 8: nutrix.intelligence.v1.ThresholdSnapshot
-	(*GetThresholdSnapshotResponse)(nil), // 9: nutrix.intelligence.v1.GetThresholdSnapshotResponse
-	(*SubmitFoodCorrectionRequest)(nil),  // 10: nutrix.intelligence.v1.SubmitFoodCorrectionRequest
-	(*SubmitFoodCorrectionResponse)(nil), // 11: nutrix.intelligence.v1.SubmitFoodCorrectionResponse
-	(*GetFeedbackAnalyticsRequest)(nil),  // 12: nutrix.intelligence.v1.GetFeedbackAnalyticsRequest
-	(*MisclassifiedFood)(nil),            // 13: nutrix.intelligence.v1.MisclassifiedFood
-	(*ConfidenceBucket)(nil),             // 14: nutrix.intelligence.v1.ConfidenceBucket
-	(*CorrectionVolume)(nil),             // 15: nutrix.intelligence.v1.CorrectionVolume
-	(*GetFeedbackAnalyticsResponse)(nil), // 16: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse
-	(*DailyNutritionSnapshot)(nil),       // 17: nutrix.intelligence.v1.DailyNutritionSnapshot
-	(*NutrientTarget)(nil),               // 18: nutrix.intelligence.v1.NutrientTarget
-	(*UserNutritionGoal)(nil),            // 19: nutrix.intelligence.v1.UserNutritionGoal
-	(*GetNutritionGapRequest)(nil),       // 20: nutrix.intelligence.v1.GetNutritionGapRequest
-	(*NutritionGap)(nil),                 // 21: nutrix.intelligence.v1.NutritionGap
-	(*GetNutritionGapResponse)(nil),      // 22: nutrix.intelligence.v1.GetNutritionGapResponse
-	(*NutrientGapItem)(nil),              // 23: nutrix.intelligence.v1.NutrientGapItem
-	(*GetRecommendationsRequest)(nil),    // 24: nutrix.intelligence.v1.GetRecommendationsRequest
-	(*RecommendationTrace)(nil),          // 25: nutrix.intelligence.v1.RecommendationTrace
-	(*AlternativeExplanation)(nil),       // 26: nutrix.intelligence.v1.AlternativeExplanation
-	(*Recommendation)(nil),               // 27: nutrix.intelligence.v1.Recommendation
-	(*GetRecommendationsResponse)(nil),   // 28: nutrix.intelligence.v1.GetRecommendationsResponse
-	(*MealScore)(nil),                    // 29: nutrix.intelligence.v1.MealScore
-	(*CandidateMeal)(nil),                // 30: nutrix.intelligence.v1.CandidateMeal
-	(*FoodRef)(nil),                      // 31: nutrix.intelligence.v1.FoodRef
-	(*MealFixImpact)(nil),                // 32: nutrix.intelligence.v1.MealFixImpact
-	(*MealFixSuggestion)(nil),            // 33: nutrix.intelligence.v1.MealFixSuggestion
-	(*MealViolation)(nil),                // 34: nutrix.intelligence.v1.MealViolation
-	(*AnalyzeMealRequest)(nil),           // 35: nutrix.intelligence.v1.AnalyzeMealRequest
-	(*AnalyzeMealResponse)(nil),          // 36: nutrix.intelligence.v1.AnalyzeMealResponse
-	(*MealIngredientDetail)(nil),         // 37: nutrix.intelligence.v1.MealIngredientDetail
-	(*MealEnrichment)(nil),               // 38: nutrix.intelligence.v1.MealEnrichment
-	nil,                                  // 39: nutrix.intelligence.v1.DailyNutritionSnapshot.MicronutrientsEntry
-	(*commonpb.RequestMeta)(nil),         // 40: nutrix.common.v1.RequestMeta
-	(commonpb.RiskLevel)(0),              // 41: nutrix.common.v1.RiskLevel
-	(*commonpb.EvidencePath)(nil),        // 42: nutrix.common.v1.EvidencePath
+	(MassSource)(0),                      // 2: nutrix.intelligence.v1.MassSource
+	(*HealthCheckRequest)(nil),           // 3: nutrix.intelligence.v1.HealthCheckRequest
+	(*HealthCheckResponse)(nil),          // 4: nutrix.intelligence.v1.HealthCheckResponse
+	(*AnalyzeFoodRequest)(nil),           // 5: nutrix.intelligence.v1.AnalyzeFoodRequest
+	(*AnalyzeFoodResponse)(nil),          // 6: nutrix.intelligence.v1.AnalyzeFoodResponse
+	(*GetThresholdSnapshotRequest)(nil),  // 7: nutrix.intelligence.v1.GetThresholdSnapshotRequest
+	(*NutrientThresholdSnapshot)(nil),    // 8: nutrix.intelligence.v1.NutrientThresholdSnapshot
+	(*ThresholdSnapshot)(nil),            // 9: nutrix.intelligence.v1.ThresholdSnapshot
+	(*GetThresholdSnapshotResponse)(nil), // 10: nutrix.intelligence.v1.GetThresholdSnapshotResponse
+	(*SubmitFoodCorrectionRequest)(nil),  // 11: nutrix.intelligence.v1.SubmitFoodCorrectionRequest
+	(*SubmitFoodCorrectionResponse)(nil), // 12: nutrix.intelligence.v1.SubmitFoodCorrectionResponse
+	(*GetFeedbackAnalyticsRequest)(nil),  // 13: nutrix.intelligence.v1.GetFeedbackAnalyticsRequest
+	(*MisclassifiedFood)(nil),            // 14: nutrix.intelligence.v1.MisclassifiedFood
+	(*ConfidenceBucket)(nil),             // 15: nutrix.intelligence.v1.ConfidenceBucket
+	(*CorrectionVolume)(nil),             // 16: nutrix.intelligence.v1.CorrectionVolume
+	(*GetFeedbackAnalyticsResponse)(nil), // 17: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse
+	(*DailyNutritionSnapshot)(nil),       // 18: nutrix.intelligence.v1.DailyNutritionSnapshot
+	(*NutrientTarget)(nil),               // 19: nutrix.intelligence.v1.NutrientTarget
+	(*UserNutritionGoal)(nil),            // 20: nutrix.intelligence.v1.UserNutritionGoal
+	(*GetNutritionGapRequest)(nil),       // 21: nutrix.intelligence.v1.GetNutritionGapRequest
+	(*NutritionGap)(nil),                 // 22: nutrix.intelligence.v1.NutritionGap
+	(*GetNutritionGapResponse)(nil),      // 23: nutrix.intelligence.v1.GetNutritionGapResponse
+	(*NutrientGapItem)(nil),              // 24: nutrix.intelligence.v1.NutrientGapItem
+	(*GetRecommendationsRequest)(nil),    // 25: nutrix.intelligence.v1.GetRecommendationsRequest
+	(*RecommendationTrace)(nil),          // 26: nutrix.intelligence.v1.RecommendationTrace
+	(*AlternativeExplanation)(nil),       // 27: nutrix.intelligence.v1.AlternativeExplanation
+	(*Recommendation)(nil),               // 28: nutrix.intelligence.v1.Recommendation
+	(*GetRecommendationsResponse)(nil),   // 29: nutrix.intelligence.v1.GetRecommendationsResponse
+	(*MealScore)(nil),                    // 30: nutrix.intelligence.v1.MealScore
+	(*CandidateMeal)(nil),                // 31: nutrix.intelligence.v1.CandidateMeal
+	(*FoodRef)(nil),                      // 32: nutrix.intelligence.v1.FoodRef
+	(*MealFixImpact)(nil),                // 33: nutrix.intelligence.v1.MealFixImpact
+	(*MealFixSuggestion)(nil),            // 34: nutrix.intelligence.v1.MealFixSuggestion
+	(*MealViolation)(nil),                // 35: nutrix.intelligence.v1.MealViolation
+	(*AnalyzeMealRequest)(nil),           // 36: nutrix.intelligence.v1.AnalyzeMealRequest
+	(*AnalyzeMealResponse)(nil),          // 37: nutrix.intelligence.v1.AnalyzeMealResponse
+	(*MealIngredientDetail)(nil),         // 38: nutrix.intelligence.v1.MealIngredientDetail
+	(*MealEnrichment)(nil),               // 39: nutrix.intelligence.v1.MealEnrichment
+	(*FoodMassInput)(nil),                // 40: nutrix.intelligence.v1.FoodMassInput
+	(*ConsumedFoodItem)(nil),             // 41: nutrix.intelligence.v1.ConsumedFoodItem
+	(*DailyIntakeContext)(nil),           // 42: nutrix.intelligence.v1.DailyIntakeContext
+	(*MassResolution)(nil),               // 43: nutrix.intelligence.v1.MassResolution
+	(*NutrientThresholdResult)(nil),      // 44: nutrix.intelligence.v1.NutrientThresholdResult
+	nil,                                  // 45: nutrix.intelligence.v1.DailyNutritionSnapshot.MicronutrientsEntry
+	(*commonpb.RequestMeta)(nil),         // 46: nutrix.common.v1.RequestMeta
+	(commonpb.RiskLevel)(0),              // 47: nutrix.common.v1.RiskLevel
+	(*commonpb.EvidencePath)(nil),        // 48: nutrix.common.v1.EvidencePath
 }
 var file_v1_nutrition_intelligence_proto_depIdxs = []int32{
-	40, // 0: nutrix.intelligence.v1.HealthCheckRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	40, // 1: nutrix.intelligence.v1.AnalyzeFoodRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	40, // 2: nutrix.intelligence.v1.AnalyzeFoodResponse.meta:type_name -> nutrix.common.v1.RequestMeta
-	41, // 3: nutrix.intelligence.v1.AnalyzeFoodResponse.risk_level:type_name -> nutrix.common.v1.RiskLevel
-	42, // 4: nutrix.intelligence.v1.AnalyzeFoodResponse.evidence_paths:type_name -> nutrix.common.v1.EvidencePath
-	26, // 5: nutrix.intelligence.v1.AnalyzeFoodResponse.alternative_explanations:type_name -> nutrix.intelligence.v1.AlternativeExplanation
-	40, // 6: nutrix.intelligence.v1.GetThresholdSnapshotRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	7,  // 7: nutrix.intelligence.v1.ThresholdSnapshot.thresholds:type_name -> nutrix.intelligence.v1.NutrientThresholdSnapshot
-	40, // 8: nutrix.intelligence.v1.GetThresholdSnapshotResponse.meta:type_name -> nutrix.common.v1.RequestMeta
-	8,  // 9: nutrix.intelligence.v1.GetThresholdSnapshotResponse.snapshot:type_name -> nutrix.intelligence.v1.ThresholdSnapshot
-	40, // 10: nutrix.intelligence.v1.SubmitFoodCorrectionRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	40, // 11: nutrix.intelligence.v1.SubmitFoodCorrectionResponse.meta:type_name -> nutrix.common.v1.RequestMeta
-	40, // 12: nutrix.intelligence.v1.GetFeedbackAnalyticsRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	40, // 13: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.meta:type_name -> nutrix.common.v1.RequestMeta
-	13, // 14: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.top_misclassified:type_name -> nutrix.intelligence.v1.MisclassifiedFood
-	14, // 15: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.confidence_distribution:type_name -> nutrix.intelligence.v1.ConfidenceBucket
-	15, // 16: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.volume:type_name -> nutrix.intelligence.v1.CorrectionVolume
-	39, // 17: nutrix.intelligence.v1.DailyNutritionSnapshot.micronutrients:type_name -> nutrix.intelligence.v1.DailyNutritionSnapshot.MicronutrientsEntry
-	18, // 18: nutrix.intelligence.v1.UserNutritionGoal.targets:type_name -> nutrix.intelligence.v1.NutrientTarget
-	40, // 19: nutrix.intelligence.v1.GetNutritionGapRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	19, // 20: nutrix.intelligence.v1.GetNutritionGapRequest.goal:type_name -> nutrix.intelligence.v1.UserNutritionGoal
-	17, // 21: nutrix.intelligence.v1.GetNutritionGapRequest.snapshot:type_name -> nutrix.intelligence.v1.DailyNutritionSnapshot
-	40, // 22: nutrix.intelligence.v1.GetNutritionGapResponse.meta:type_name -> nutrix.common.v1.RequestMeta
-	21, // 23: nutrix.intelligence.v1.GetNutritionGapResponse.gaps:type_name -> nutrix.intelligence.v1.NutritionGap
-	40, // 24: nutrix.intelligence.v1.GetRecommendationsRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	23, // 25: nutrix.intelligence.v1.GetRecommendationsRequest.gaps:type_name -> nutrix.intelligence.v1.NutrientGapItem
+	46, // 0: nutrix.intelligence.v1.HealthCheckRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	46, // 1: nutrix.intelligence.v1.AnalyzeFoodRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	46, // 2: nutrix.intelligence.v1.AnalyzeFoodResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	47, // 3: nutrix.intelligence.v1.AnalyzeFoodResponse.risk_level:type_name -> nutrix.common.v1.RiskLevel
+	48, // 4: nutrix.intelligence.v1.AnalyzeFoodResponse.evidence_paths:type_name -> nutrix.common.v1.EvidencePath
+	27, // 5: nutrix.intelligence.v1.AnalyzeFoodResponse.alternative_explanations:type_name -> nutrix.intelligence.v1.AlternativeExplanation
+	46, // 6: nutrix.intelligence.v1.GetThresholdSnapshotRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	8,  // 7: nutrix.intelligence.v1.ThresholdSnapshot.thresholds:type_name -> nutrix.intelligence.v1.NutrientThresholdSnapshot
+	46, // 8: nutrix.intelligence.v1.GetThresholdSnapshotResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	9,  // 9: nutrix.intelligence.v1.GetThresholdSnapshotResponse.snapshot:type_name -> nutrix.intelligence.v1.ThresholdSnapshot
+	46, // 10: nutrix.intelligence.v1.SubmitFoodCorrectionRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	46, // 11: nutrix.intelligence.v1.SubmitFoodCorrectionResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	46, // 12: nutrix.intelligence.v1.GetFeedbackAnalyticsRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	46, // 13: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	14, // 14: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.top_misclassified:type_name -> nutrix.intelligence.v1.MisclassifiedFood
+	15, // 15: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.confidence_distribution:type_name -> nutrix.intelligence.v1.ConfidenceBucket
+	16, // 16: nutrix.intelligence.v1.GetFeedbackAnalyticsResponse.volume:type_name -> nutrix.intelligence.v1.CorrectionVolume
+	45, // 17: nutrix.intelligence.v1.DailyNutritionSnapshot.micronutrients:type_name -> nutrix.intelligence.v1.DailyNutritionSnapshot.MicronutrientsEntry
+	19, // 18: nutrix.intelligence.v1.UserNutritionGoal.targets:type_name -> nutrix.intelligence.v1.NutrientTarget
+	46, // 19: nutrix.intelligence.v1.GetNutritionGapRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	20, // 20: nutrix.intelligence.v1.GetNutritionGapRequest.goal:type_name -> nutrix.intelligence.v1.UserNutritionGoal
+	18, // 21: nutrix.intelligence.v1.GetNutritionGapRequest.snapshot:type_name -> nutrix.intelligence.v1.DailyNutritionSnapshot
+	46, // 22: nutrix.intelligence.v1.GetNutritionGapResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	22, // 23: nutrix.intelligence.v1.GetNutritionGapResponse.gaps:type_name -> nutrix.intelligence.v1.NutritionGap
+	46, // 24: nutrix.intelligence.v1.GetRecommendationsRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	24, // 25: nutrix.intelligence.v1.GetRecommendationsRequest.gaps:type_name -> nutrix.intelligence.v1.NutrientGapItem
 	0,  // 26: nutrix.intelligence.v1.RecommendationTrace.reason_type:type_name -> nutrix.intelligence.v1.RecommendationReasonType
-	25, // 27: nutrix.intelligence.v1.AlternativeExplanation.recommendation_trace:type_name -> nutrix.intelligence.v1.RecommendationTrace
-	25, // 28: nutrix.intelligence.v1.Recommendation.traces:type_name -> nutrix.intelligence.v1.RecommendationTrace
-	40, // 29: nutrix.intelligence.v1.GetRecommendationsResponse.meta:type_name -> nutrix.common.v1.RequestMeta
-	27, // 30: nutrix.intelligence.v1.GetRecommendationsResponse.recommendations:type_name -> nutrix.intelligence.v1.Recommendation
-	31, // 31: nutrix.intelligence.v1.CandidateMeal.food_refs:type_name -> nutrix.intelligence.v1.FoodRef
-	30, // 32: nutrix.intelligence.v1.MealFixSuggestion.replacement:type_name -> nutrix.intelligence.v1.CandidateMeal
-	32, // 33: nutrix.intelligence.v1.MealFixSuggestion.impact:type_name -> nutrix.intelligence.v1.MealFixImpact
-	41, // 34: nutrix.intelligence.v1.MealViolation.severity:type_name -> nutrix.common.v1.RiskLevel
-	40, // 35: nutrix.intelligence.v1.AnalyzeMealRequest.meta:type_name -> nutrix.common.v1.RequestMeta
-	30, // 36: nutrix.intelligence.v1.AnalyzeMealRequest.candidate:type_name -> nutrix.intelligence.v1.CandidateMeal
-	40, // 37: nutrix.intelligence.v1.AnalyzeMealResponse.meta:type_name -> nutrix.common.v1.RequestMeta
-	1,  // 38: nutrix.intelligence.v1.AnalyzeMealResponse.status:type_name -> nutrix.intelligence.v1.MealApprovalStatus
-	29, // 39: nutrix.intelligence.v1.AnalyzeMealResponse.score:type_name -> nutrix.intelligence.v1.MealScore
-	34, // 40: nutrix.intelligence.v1.AnalyzeMealResponse.violations:type_name -> nutrix.intelligence.v1.MealViolation
-	33, // 41: nutrix.intelligence.v1.AnalyzeMealResponse.fixes:type_name -> nutrix.intelligence.v1.MealFixSuggestion
-	38, // 42: nutrix.intelligence.v1.AnalyzeMealResponse.enrichment:type_name -> nutrix.intelligence.v1.MealEnrichment
-	37, // 43: nutrix.intelligence.v1.MealEnrichment.ingredients:type_name -> nutrix.intelligence.v1.MealIngredientDetail
-	2,  // 44: nutrix.intelligence.v1.NutritionIntelligenceService.HealthCheck:input_type -> nutrix.intelligence.v1.HealthCheckRequest
-	4,  // 45: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeFood:input_type -> nutrix.intelligence.v1.AnalyzeFoodRequest
-	6,  // 46: nutrix.intelligence.v1.NutritionIntelligenceService.GetThresholdSnapshot:input_type -> nutrix.intelligence.v1.GetThresholdSnapshotRequest
-	10, // 47: nutrix.intelligence.v1.NutritionIntelligenceService.SubmitFoodCorrection:input_type -> nutrix.intelligence.v1.SubmitFoodCorrectionRequest
-	12, // 48: nutrix.intelligence.v1.NutritionIntelligenceService.GetFeedbackAnalytics:input_type -> nutrix.intelligence.v1.GetFeedbackAnalyticsRequest
-	20, // 49: nutrix.intelligence.v1.NutritionIntelligenceService.GetNutritionGap:input_type -> nutrix.intelligence.v1.GetNutritionGapRequest
-	24, // 50: nutrix.intelligence.v1.NutritionIntelligenceService.GetRecommendations:input_type -> nutrix.intelligence.v1.GetRecommendationsRequest
-	35, // 51: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeMeal:input_type -> nutrix.intelligence.v1.AnalyzeMealRequest
-	3,  // 52: nutrix.intelligence.v1.NutritionIntelligenceService.HealthCheck:output_type -> nutrix.intelligence.v1.HealthCheckResponse
-	5,  // 53: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeFood:output_type -> nutrix.intelligence.v1.AnalyzeFoodResponse
-	9,  // 54: nutrix.intelligence.v1.NutritionIntelligenceService.GetThresholdSnapshot:output_type -> nutrix.intelligence.v1.GetThresholdSnapshotResponse
-	11, // 55: nutrix.intelligence.v1.NutritionIntelligenceService.SubmitFoodCorrection:output_type -> nutrix.intelligence.v1.SubmitFoodCorrectionResponse
-	16, // 56: nutrix.intelligence.v1.NutritionIntelligenceService.GetFeedbackAnalytics:output_type -> nutrix.intelligence.v1.GetFeedbackAnalyticsResponse
-	22, // 57: nutrix.intelligence.v1.NutritionIntelligenceService.GetNutritionGap:output_type -> nutrix.intelligence.v1.GetNutritionGapResponse
-	28, // 58: nutrix.intelligence.v1.NutritionIntelligenceService.GetRecommendations:output_type -> nutrix.intelligence.v1.GetRecommendationsResponse
-	36, // 59: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeMeal:output_type -> nutrix.intelligence.v1.AnalyzeMealResponse
-	52, // [52:60] is the sub-list for method output_type
-	44, // [44:52] is the sub-list for method input_type
-	44, // [44:44] is the sub-list for extension type_name
-	44, // [44:44] is the sub-list for extension extendee
-	0,  // [0:44] is the sub-list for field type_name
+	26, // 27: nutrix.intelligence.v1.AlternativeExplanation.recommendation_trace:type_name -> nutrix.intelligence.v1.RecommendationTrace
+	26, // 28: nutrix.intelligence.v1.Recommendation.traces:type_name -> nutrix.intelligence.v1.RecommendationTrace
+	46, // 29: nutrix.intelligence.v1.GetRecommendationsResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	28, // 30: nutrix.intelligence.v1.GetRecommendationsResponse.recommendations:type_name -> nutrix.intelligence.v1.Recommendation
+	32, // 31: nutrix.intelligence.v1.CandidateMeal.food_refs:type_name -> nutrix.intelligence.v1.FoodRef
+	40, // 32: nutrix.intelligence.v1.CandidateMeal.food_masses:type_name -> nutrix.intelligence.v1.FoodMassInput
+	42, // 33: nutrix.intelligence.v1.CandidateMeal.daily_intake:type_name -> nutrix.intelligence.v1.DailyIntakeContext
+	31, // 34: nutrix.intelligence.v1.MealFixSuggestion.replacement:type_name -> nutrix.intelligence.v1.CandidateMeal
+	33, // 35: nutrix.intelligence.v1.MealFixSuggestion.impact:type_name -> nutrix.intelligence.v1.MealFixImpact
+	47, // 36: nutrix.intelligence.v1.MealViolation.severity:type_name -> nutrix.common.v1.RiskLevel
+	46, // 37: nutrix.intelligence.v1.AnalyzeMealRequest.meta:type_name -> nutrix.common.v1.RequestMeta
+	31, // 38: nutrix.intelligence.v1.AnalyzeMealRequest.candidate:type_name -> nutrix.intelligence.v1.CandidateMeal
+	46, // 39: nutrix.intelligence.v1.AnalyzeMealResponse.meta:type_name -> nutrix.common.v1.RequestMeta
+	1,  // 40: nutrix.intelligence.v1.AnalyzeMealResponse.status:type_name -> nutrix.intelligence.v1.MealApprovalStatus
+	30, // 41: nutrix.intelligence.v1.AnalyzeMealResponse.score:type_name -> nutrix.intelligence.v1.MealScore
+	35, // 42: nutrix.intelligence.v1.AnalyzeMealResponse.violations:type_name -> nutrix.intelligence.v1.MealViolation
+	34, // 43: nutrix.intelligence.v1.AnalyzeMealResponse.fixes:type_name -> nutrix.intelligence.v1.MealFixSuggestion
+	39, // 44: nutrix.intelligence.v1.AnalyzeMealResponse.enrichment:type_name -> nutrix.intelligence.v1.MealEnrichment
+	44, // 45: nutrix.intelligence.v1.AnalyzeMealResponse.nutrient_results:type_name -> nutrix.intelligence.v1.NutrientThresholdResult
+	43, // 46: nutrix.intelligence.v1.AnalyzeMealResponse.mass_resolutions:type_name -> nutrix.intelligence.v1.MassResolution
+	38, // 47: nutrix.intelligence.v1.MealEnrichment.ingredients:type_name -> nutrix.intelligence.v1.MealIngredientDetail
+	2,  // 48: nutrix.intelligence.v1.FoodMassInput.actual_mass_source:type_name -> nutrix.intelligence.v1.MassSource
+	41, // 49: nutrix.intelligence.v1.DailyIntakeContext.items:type_name -> nutrix.intelligence.v1.ConsumedFoodItem
+	2,  // 50: nutrix.intelligence.v1.MassResolution.mass_source:type_name -> nutrix.intelligence.v1.MassSource
+	2,  // 51: nutrix.intelligence.v1.MassResolution.authoritative_mass_source:type_name -> nutrix.intelligence.v1.MassSource
+	3,  // 52: nutrix.intelligence.v1.NutritionIntelligenceService.HealthCheck:input_type -> nutrix.intelligence.v1.HealthCheckRequest
+	5,  // 53: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeFood:input_type -> nutrix.intelligence.v1.AnalyzeFoodRequest
+	7,  // 54: nutrix.intelligence.v1.NutritionIntelligenceService.GetThresholdSnapshot:input_type -> nutrix.intelligence.v1.GetThresholdSnapshotRequest
+	11, // 55: nutrix.intelligence.v1.NutritionIntelligenceService.SubmitFoodCorrection:input_type -> nutrix.intelligence.v1.SubmitFoodCorrectionRequest
+	13, // 56: nutrix.intelligence.v1.NutritionIntelligenceService.GetFeedbackAnalytics:input_type -> nutrix.intelligence.v1.GetFeedbackAnalyticsRequest
+	21, // 57: nutrix.intelligence.v1.NutritionIntelligenceService.GetNutritionGap:input_type -> nutrix.intelligence.v1.GetNutritionGapRequest
+	25, // 58: nutrix.intelligence.v1.NutritionIntelligenceService.GetRecommendations:input_type -> nutrix.intelligence.v1.GetRecommendationsRequest
+	36, // 59: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeMeal:input_type -> nutrix.intelligence.v1.AnalyzeMealRequest
+	4,  // 60: nutrix.intelligence.v1.NutritionIntelligenceService.HealthCheck:output_type -> nutrix.intelligence.v1.HealthCheckResponse
+	6,  // 61: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeFood:output_type -> nutrix.intelligence.v1.AnalyzeFoodResponse
+	10, // 62: nutrix.intelligence.v1.NutritionIntelligenceService.GetThresholdSnapshot:output_type -> nutrix.intelligence.v1.GetThresholdSnapshotResponse
+	12, // 63: nutrix.intelligence.v1.NutritionIntelligenceService.SubmitFoodCorrection:output_type -> nutrix.intelligence.v1.SubmitFoodCorrectionResponse
+	17, // 64: nutrix.intelligence.v1.NutritionIntelligenceService.GetFeedbackAnalytics:output_type -> nutrix.intelligence.v1.GetFeedbackAnalyticsResponse
+	23, // 65: nutrix.intelligence.v1.NutritionIntelligenceService.GetNutritionGap:output_type -> nutrix.intelligence.v1.GetNutritionGapResponse
+	29, // 66: nutrix.intelligence.v1.NutritionIntelligenceService.GetRecommendations:output_type -> nutrix.intelligence.v1.GetRecommendationsResponse
+	37, // 67: nutrix.intelligence.v1.NutritionIntelligenceService.AnalyzeMeal:output_type -> nutrix.intelligence.v1.AnalyzeMealResponse
+	60, // [60:68] is the sub-list for method output_type
+	52, // [52:60] is the sub-list for method input_type
+	52, // [52:52] is the sub-list for extension type_name
+	52, // [52:52] is the sub-list for extension extendee
+	0,  // [0:52] is the sub-list for field type_name
 }
 
 func init() { file_v1_nutrition_intelligence_proto_init() }
@@ -2937,13 +3578,18 @@ func file_v1_nutrition_intelligence_proto_init() {
 	if File_v1_nutrition_intelligence_proto != nil {
 		return
 	}
+	file_v1_nutrition_intelligence_proto_msgTypes[32].OneofWrappers = []any{}
+	file_v1_nutrition_intelligence_proto_msgTypes[37].OneofWrappers = []any{}
+	file_v1_nutrition_intelligence_proto_msgTypes[38].OneofWrappers = []any{}
+	file_v1_nutrition_intelligence_proto_msgTypes[40].OneofWrappers = []any{}
+	file_v1_nutrition_intelligence_proto_msgTypes[41].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_nutrition_intelligence_proto_rawDesc), len(file_v1_nutrition_intelligence_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   38,
+			NumEnums:      3,
+			NumMessages:   43,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -1790,6 +1790,11 @@ func (u *nutritionUseCase) AnalyzeMeal(ctx context.Context, userID uuid.UUID, re
 		}
 	}
 
+	// Today's intake always comes from the JWT user's food_logs, server-side
+	// only (Phase 10 D-13, NFR-6); any client value is overwritten. The meal
+	// is validated before it is logged, so it is not double-counted.
+	req.Candidate.DailyIntake = u.dailyIntakeForUser(ctx, userID, time.Now())
+
 	resp, err := u.kgPort.AnalyzeMeal(ctx, req)
 	if err != nil {
 		if localResp := u.analyzeMealFromCatalog(ctx, userID, req); localResp != nil {
@@ -1810,6 +1815,30 @@ func (u *nutritionUseCase) AnalyzeMeal(ctx context.Context, userID uuid.UUID, re
 	}
 
 	return normalized, nil
+}
+
+// dailyIntakeForUser loads today's logged items for AI_server's daily-budget
+// evaluation. A repository error yields Present=false (AI_server treats the
+// consumed part as unknown), never an empty present day (Phase 10 RESEARCH
+// Pitfall 2). Quantities and food ids are validated by AI_server, which
+// treats bad values as unknown, never zero.
+func (u *nutritionUseCase) dailyIntakeForUser(ctx context.Context, userID uuid.UUID, now time.Time) *domain.DailyIntakeContext {
+	consumedDate := now.Format("2006-01-02")
+	logs, err := u.repo.GetDailyLogs(ctx, userID, now)
+	if err != nil {
+		log.Printf("[AnalyzeMeal] daily intake unavailable, sending absent: %T", err)
+		return &domain.DailyIntakeContext{Present: false, ConsumedDate: consumedDate}
+	}
+
+	items := make([]domain.ConsumedFoodItem, 0, len(logs))
+	for _, mealLog := range logs {
+		quantity := mealLog.QuantityGrams
+		items = append(items, domain.ConsumedFoodItem{
+			FoodID:    mealLog.FoodID.String(),
+			QuantityG: &quantity,
+		})
+	}
+	return &domain.DailyIntakeContext{Present: true, Items: items, ConsumedDate: consumedDate}
 }
 
 func (u *nutritionUseCase) analyzeMealFromCatalog(ctx context.Context, userID uuid.UUID, req *domain.AnalyzeMealRequest) *domain.AnalyzeMealResponse {

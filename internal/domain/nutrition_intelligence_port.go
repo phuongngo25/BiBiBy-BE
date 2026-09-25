@@ -196,6 +196,30 @@ type CandidateMeal struct {
 	// this loaded to build FoodIDs) passes names through here. Populated by
 	// AnalyzeMeal() usecase before the gRPC call, not by request callers.
 	FoodRefs []FoodRef `json:"food_refs,omitempty"`
+	// DailyIntake carries today's logged items for the JWT user so AI_server
+	// can evaluate the remaining daily nutrient budget (Phase 10 D-01/D-13).
+	// Populated by the AnalyzeMeal usecase from the user's food_logs; never
+	// bound from client JSON, because a client-supplied empty day would
+	// understate intake (Phase 10 RESEARCH Security V4 / Pitfall 2).
+	// nil means "not sent" (the planner path): AI_server reads it as absent.
+	DailyIntake *DailyIntakeContext `json:"-"`
+}
+
+// ConsumedFoodItem is one food already logged today. QuantityG nil means the
+// quantity is unknown; it is never sent as 0.
+type ConsumedFoodItem struct {
+	FoodID    string   `json:"food_id"`
+	QuantityG *float64 `json:"quantity_g,omitempty"`
+}
+
+// DailyIntakeContext mirrors the proto message of the same name. Present
+// false means today's intake could not be loaded (AI_server treats the
+// consumed part as unknown); Present true with no Items is a genuinely empty
+// day.
+type DailyIntakeContext struct {
+	Present      bool               `json:"present"`
+	Items        []ConsumedFoodItem `json:"items"`
+	ConsumedDate string             `json:"consumed_date"` // YYYY-MM-DD
 }
 
 type FoodRef struct {
@@ -220,6 +244,28 @@ type MealViolation struct {
 	Description      string   `json:"description"`
 	Severity         string   `json:"severity"`
 	OffendingFoodIDs []string `json:"offending_food_ids"`
+	// Set only for violation_type "nutrient_threshold" (Phase 10 D-06).
+	NutrientID  string   `json:"nutrient_id,omitempty"`
+	ProjectedMg *float64 `json:"projected_mg,omitempty"`
+	ThresholdMg *float64 `json:"threshold_mg,omitempty"`
+}
+
+// NutrientThresholdResult is AI_server's per-nutrient daily-budget
+// evaluation for one meal (Phase 10). Go never computes these; it only
+// carries them to the client.
+type NutrientThresholdResult struct {
+	NutrientID             string   `json:"nutrient_id"`
+	Status                 string   `json:"status"`
+	ThisMealMg             *float64 `json:"this_meal_mg,omitempty"`
+	ConsumedTodayMg        *float64 `json:"consumed_today_mg,omitempty"`
+	ProjectedMg            *float64 `json:"projected_mg,omitempty"`
+	Complete               bool     `json:"complete"`
+	WarningMg              float64  `json:"warning_mg"`
+	CriticalMg             float64  `json:"critical_mg"`
+	DiseaseOverride        bool     `json:"disease_override"`
+	CappedNonAuthoritative bool     `json:"capped_non_authoritative"`
+	ContributingFoodIDs    []string `json:"contributing_food_ids"`
+	Note                   string   `json:"note,omitempty"`
 }
 
 type MealEvidencePath struct {
@@ -266,4 +312,7 @@ type AnalyzeMealResponse struct {
 	Enrichment       *MealEnrichment     `json:"enrichment,omitempty"`
 	Fixes            []MealFixSuggestion `json:"fixes"`
 	SafeAlternatives []MealFixSuggestion `json:"safeAlternatives"`
+	// NutrientResults is omitted when AI_server sent none, so pre-Phase-10
+	// responses keep their exact JSON shape.
+	NutrientResults []NutrientThresholdResult `json:"nutrientResults,omitempty"`
 }
