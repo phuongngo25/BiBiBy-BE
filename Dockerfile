@@ -11,6 +11,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/server ./cmd/server
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/seeder ./cmd/seeder
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/seed_demo ./cmd/seed_demo
 
 FROM alpine:3.20
 
@@ -20,6 +21,7 @@ RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=builder /out/server /app/server
 COPY --from=builder /out/seeder /app/seeder
+COPY --from=builder /out/seed_demo /app/seed_demo
 
 COPY migrations /app/migrations
 COPY DRIs.json /app/DRIs.json
